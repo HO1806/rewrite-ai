@@ -42,10 +42,10 @@
   "commands": {
     "improve-writing": {
       "suggested_key": {
-        "default": "Alt+H",
-        "mac": "Alt+H"
+        "default": "Ctrl+Shift+D",
+        "mac": "Command+Shift+D"
       },
-      "description": "Improve selected text with Rewrite AI"
+      "description": "Rewrite selected text"
     }
   }
 }

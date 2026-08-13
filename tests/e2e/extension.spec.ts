@@ -70,6 +70,27 @@ function card(page: Page) {
   return page.locator('#rewrite-ai-root .card');
 }
 
+/** The inline offer, in its own shadow host. */
+function trigger(page: Page) {
+  return page.locator('#rewrite-ai-trigger .trigger');
+}
+
+/**
+ * Select the whole of an editable field.
+ *
+ * Every rewrite now needs a live selection the extension can write back into —
+ * matching Edge, which offers the feature only in editable fields.
+ */
+async function selectAllIn(page: Page, id: string): Promise<void> {
+  await page.locator(`#${id}`).focus();
+  await page.evaluate((target) => {
+    const el = document.getElementById(target) as
+      HTMLInputElement | HTMLTextAreaElement;
+    el.setSelectionRange(0, el.value.length);
+    document.dispatchEvent(new Event('selectionchange'));
+  }, id);
+}
+
 test.describe('extension loads', () => {
   test('registers a service worker with an extension id', async ({
     worker,
@@ -158,9 +179,10 @@ test.describe('the floating card', () => {
   }) => {
     const page = await context.newPage();
     await page.goto(pageUrl);
+    await selectAllIn(page, 'ta');
 
     expect(
-      await triggerRewrite(worker, 'The way we work is changing.'),
+      await triggerRewrite(worker, 'their going to the meating tomorow'),
     ).toEqual({ ok: true });
 
     await expect(card(page)).toBeVisible();
@@ -194,6 +216,7 @@ test.describe('the floating card', () => {
   }) => {
     const page = await context.newPage();
     await page.goto(pageUrl);
+    await selectAllIn(page, 'ta');
 
     await triggerRewrite(worker, 'their going to the meating tomorow');
 
@@ -204,11 +227,127 @@ test.describe('the floating card', () => {
   test('is dismissed by Escape', async ({ context, worker, pageUrl }) => {
     const page = await context.newPage();
     await page.goto(pageUrl);
+    await selectAllIn(page, 'ta');
     await triggerRewrite(worker, 'some text');
     await expect(card(page)).toBeVisible();
 
     await page.keyboard.press('Escape');
     await expect(card(page)).toHaveCount(0);
+  });
+});
+
+/**
+ * Edge's defining interaction: the offer appears on selecting text, with no
+ * right-click. Only a real browser can confirm it is visible and clickable
+ * against a hostile page.
+ */
+test.describe('the inline trigger', () => {
+  test.beforeEach(async ({ seedSettings }) => {
+    await seedSettings();
+  });
+
+  test('appears on selecting text in a textarea, above a high z-index overlay', async ({
+    context,
+    pageUrl,
+  }) => {
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+
+    await expect(trigger(page)).toHaveCount(0);
+    await selectAllIn(page, 'ta');
+
+    await expect(trigger(page)).toBeVisible();
+    await expect(trigger(page)).toContainText('Rewrite');
+
+    // The same hit test that caught the missing z-index on the card: the button
+    // must be what the user actually clicks, not the page's overlay.
+    const topmost = await page.evaluate(() => {
+      const host = document.getElementById('rewrite-ai-trigger')!;
+      const box = host
+        .shadowRoot!.querySelector('.trigger')!
+        .getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2,
+      );
+      return hit?.id ?? hit?.tagName ?? null;
+    });
+    expect(topmost).toBe('rewrite-ai-trigger');
+  });
+
+  test('appears for a text input too', async ({ context, pageUrl }) => {
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+    await selectAllIn(page, 'inp');
+
+    await expect(trigger(page)).toBeVisible();
+  });
+
+  /** The editable-only scope: no offer where the result could not be applied. */
+  test('does not appear for read-only page text', async ({
+    context,
+    pageUrl,
+  }) => {
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+
+    await page.evaluate(() => {
+      const range = document.createRange();
+      range.selectNodeContents(document.getElementById('para')!);
+      const selection = getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event('selectionchange'));
+    });
+
+    await expect(page.locator('#rewrite-ai-trigger')).toHaveCount(0);
+  });
+
+  test('opens the card when clicked, and gets out of the way', async ({
+    context,
+    pageUrl,
+  }) => {
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+    await selectAllIn(page, 'ta');
+    await expect(trigger(page)).toBeVisible();
+
+    await trigger(page).click();
+
+    await expect(card(page)).toBeVisible();
+    await expect(card(page)).toContainText(EXPECTED_REWRITE);
+    // The offer must not linger behind the card it opened.
+    await expect(page.locator('#rewrite-ai-trigger')).toHaveCount(0);
+  });
+
+  test('the whole flow works end to end from the button', async ({
+    context,
+    pageUrl,
+  }) => {
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+    await selectAllIn(page, 'ta');
+
+    await trigger(page).click();
+    await expect(card(page)).toContainText(EXPECTED_REWRITE);
+    await page.getByRole('button', { name: /^Replace$/ }).click();
+
+    await expect(page.locator('#ta')).toHaveValue(EXPECTED_REWRITE);
+  });
+
+  test('hides when the selection collapses', async ({ context, pageUrl }) => {
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+    await selectAllIn(page, 'ta');
+    await expect(trigger(page)).toBeVisible();
+
+    await page.evaluate(() => {
+      const el = document.getElementById('ta') as HTMLTextAreaElement;
+      el.setSelectionRange(0, 0);
+      document.dispatchEvent(new Event('selectionchange'));
+    });
+
+    await expect(page.locator('#rewrite-ai-trigger')).toHaveCount(0);
   });
 });
 
@@ -281,6 +420,7 @@ test.describe('content script recovery', () => {
   }) => {
     const page = await context.newPage();
     await page.goto(pageUrl);
+    await selectAllIn(page, 'ta');
 
     expect(await triggerRewrite(worker, 'first attempt')).toEqual({ ok: true });
     await expect(card(page)).toBeVisible();

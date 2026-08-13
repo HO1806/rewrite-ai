@@ -29,14 +29,7 @@ export const rewriteActionSchema = z.enum([
 
 export const adjustParamsSchema = z.object({
   tone: z
-    .enum([
-      'professional',
-      'casual',
-      'enthusiastic',
-      'informal',
-      'neutral',
-      'funny',
-    ])
+    .enum(['professional', 'casual', 'enthusiastic', 'informational', 'funny'])
     .optional(),
   format: z.enum(['paragraph', 'email', 'ideas', 'blog']).optional(),
   length: z.enum(['short', 'medium', 'long']).optional(),
@@ -76,6 +69,22 @@ export const streamRequestSchema = z.object({
   text: z.string().min(1).max(MAX_INPUT_LENGTH),
   adjustParams: adjustParamsSchema.optional(),
 }) satisfies z.ZodType<StreamRequest>;
+
+/**
+ * content → background, one-shot.
+ *
+ * The content script needs the theme, and nothing else. It must not read the
+ * settings object to get it: that object holds the API key, and pulling the key
+ * into a process shared with the page is exactly what this codebase went out of
+ * its way to stop doing. So it asks for the one harmless field.
+ */
+export const themeRequestSchema = z.object({
+  type: z.literal('GET_THEME'),
+});
+
+export const themeResponseSchema = z.object({
+  theme: z.enum(['light', 'dark', 'system']),
+});
 
 /** background → content, over the streaming port */
 export const streamMessageSchema = z.discriminatedUnion('type', [

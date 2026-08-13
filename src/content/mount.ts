@@ -1,61 +1,76 @@
 /**
- * Card mount lifecycle.
+ * In-page surface lifecycle.
  *
- * The React root and the DOM node it renders into are stored together and
- * always created and discarded as a pair. Previously the root was cached in a
- * module global while the mount point was looked up fresh on every call, so if
- * the host element was removed by anything other than the card's own close
- * handler — an SPA route change, a host-page sanitizer — the next invocation
- * built a new host but rendered into the old detached node. The card silently
- * stopped appearing for the rest of the page's life.
+ * Two independent surfaces: the floating `card`, and the inline `trigger` button
+ * that offers a rewrite when text is selected. Each keeps its React root and the
+ * DOM node it renders into together, and always creates and discards them as a
+ * pair. Previously a root was cached in a module global while the mount point was
+ * looked up fresh on every call, so if the host element was removed by anything
+ * other than the close handler — an SPA route change, a host-page sanitizer — the
+ * next invocation built a new host but rendered into the old detached node, and
+ * the card silently stopped appearing for the rest of the page's life.
  */
 
 import type { ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { SHADOW_HOST_ID, TRIGGER_HOST_ID } from '@/shared/constants';
 import { createShadowContainer, removeShadowContainer } from './shadow';
+
+export type SurfaceName = 'card' | 'trigger';
+
+const HOST_IDS: Record<SurfaceName, string> = {
+  card: SHADOW_HOST_ID,
+  trigger: TRIGGER_HOST_ID,
+};
 
 interface ActiveMount {
   root: Root;
   host: HTMLElement;
 }
 
-let active: ActiveMount | null = null;
+const active = new Map<SurfaceName, ActiveMount>();
 
-/** Render into a fresh container, replacing any existing card. */
-export function mountCard(render: (close: () => void) => ReactNode): void {
-  unmountCard();
+/** Render a surface into a fresh container, replacing any existing one. */
+export function mountSurface(
+  name: SurfaceName,
+  render: (close: () => void) => ReactNode,
+): void {
+  unmountSurface(name);
 
-  const { host, mountPoint } = createShadowContainer();
+  const { host, mountPoint } = createShadowContainer(HOST_IDS[name]);
   const root = createRoot(mountPoint);
-  active = { root, host };
+  active.set(name, { root, host });
 
-  root.render(render(unmountCard));
+  root.render(render(() => unmountSurface(name)));
 }
 
-export function unmountCard(): void {
-  if (!active) {
+export function unmountSurface(name: SurfaceName): void {
+  const mounted = active.get(name);
+
+  if (!mounted) {
     // Clear any host left behind by a previous page state.
-    removeShadowContainer();
+    removeShadowContainer(HOST_IDS[name]);
     return;
   }
 
-  const { root, host } = active;
-  active = null;
+  active.delete(name);
 
   // Unmounting synchronously from inside a React event handler warns, so the
   // teardown is deferred to a microtask.
   queueMicrotask(() => {
-    root.unmount();
-    host.remove();
+    mounted.root.unmount();
+    mounted.host.remove();
   });
 }
 
-/** Test seam: whether a card is currently mounted. */
-export function isCardMounted(): boolean {
-  return active !== null;
+export function isSurfaceMounted(name: SurfaceName): boolean {
+  return active.has(name);
 }
 
-/** Propagate the user's theme choice to the shadow root. */
-export function applyCardTheme(theme: 'light' | 'dark'): void {
-  active?.host.setAttribute('data-theme', theme);
+/** Propagate the user's theme choice to a surface's shadow root. */
+export function applySurfaceTheme(
+  name: SurfaceName,
+  theme: 'light' | 'dark',
+): void {
+  active.get(name)?.host.setAttribute('data-theme', theme);
 }

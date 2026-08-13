@@ -7,7 +7,7 @@
  * couple of thousand pixels down the extension appeared to do nothing at all.
  */
 
-import { CARD } from '@/shared/constants';
+import { CARD, TRIGGER } from '@/shared/constants';
 import type { CardPosition, SelectionInfo } from '@/shared/types';
 
 /**
@@ -24,6 +24,27 @@ export function getSelectionInfo(): SelectionInfo | null {
   if (formFieldSelection) return formFieldSelection;
 
   return readWindowSelection();
+}
+
+/**
+ * A selection the extension can actually write back into.
+ *
+ * Edge only offers Rewrite in editable fields, and so do we: every card that
+ * opens can be applied. Read-only page text used to open a card whose Replace
+ * button silently degraded to a clipboard copy and relabelled itself "Copied
+ * instead", which is a confusing thing to discover after the fact.
+ */
+export function getEditableSelectionInfo(): SelectionInfo | null {
+  const info = getSelectionInfo();
+  return info && isEditableSelection(info) ? info : null;
+}
+
+export function isEditableSelection(info: SelectionInfo): boolean {
+  return (
+    info.elementType === 'textarea' ||
+    info.elementType === 'input' ||
+    info.elementType === 'contenteditable'
+  );
 }
 
 /** A selection inside an <input> or <textarea>. */
@@ -101,27 +122,51 @@ export function positionBelow(
   rect: DOMRect,
   height: number = CARD.height,
 ): CardPosition {
-  const { width, offset, margin } = CARD;
+  return positionAnchored(rect, {
+    width: CARD.width,
+    height,
+    offset: CARD.offset,
+  });
+}
+
+/** Place the inline trigger button just below the selection. */
+export function positionTrigger(rect: DOMRect): CardPosition {
+  return positionAnchored(rect, TRIGGER);
+}
+
+interface AnchorSize {
+  readonly width: number;
+  readonly height: number;
+  readonly offset: number;
+}
+
+/** The shared geometry, used for both the card and the trigger button. */
+export function positionAnchored(
+  rect: DOMRect,
+  size: AnchorSize,
+): CardPosition {
+  const { margin } = CARD;
+  const { width, offset } = size;
 
   // Never claim more room than the viewport has.
-  const cardHeight = Math.min(height, window.innerHeight - 2 * margin);
+  const height = Math.min(size.height, window.innerHeight - 2 * margin);
 
   const fitsBelow =
-    rect.bottom + offset + cardHeight <= window.innerHeight - margin;
-  const fitsAbove = rect.top - offset - cardHeight >= margin;
+    rect.bottom + offset + height <= window.innerHeight - margin;
+  const fitsAbove = rect.top - offset - height >= margin;
 
   const top = fitsBelow
     ? rect.bottom + offset
     : fitsAbove
-      ? rect.top - offset - cardHeight
+      ? rect.top - offset - height
       : // Neither side fits: sit as low as possible without overflowing.
-        window.innerHeight - cardHeight - margin;
+        window.innerHeight - height - margin;
 
   return {
     top: clamp(
       top,
       margin,
-      Math.max(margin, window.innerHeight - cardHeight - margin),
+      Math.max(margin, window.innerHeight - height - margin),
     ),
     left: clamp(rect.left, margin, window.innerWidth - width - margin),
   };

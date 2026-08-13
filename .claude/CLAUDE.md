@@ -30,8 +30,11 @@ Loading the built extension: `chrome://extensions` → Developer mode → Load u
 ## How a rewrite flows
 
 ```
-context menu click / Alt+H
-  → background/index.ts        resolves the action, delivers to the tab
+inline Rewrite button (content/trigger.tsx) — the primary path
+  → content/index.tsx          opens the card directly, no worker round trip
+
+context menu click / Ctrl+Shift+D
+  → background/index.ts        resolves the action, delivers to the clicked frame
   → background/tabs.ts         injects the content script if the tab lacks one, then resends
   → content/index.tsx          validates the message, opens the card
   → content/mount.ts           builds a shadow host + React root as a pair
@@ -51,7 +54,7 @@ The **fetch happens in the service worker**, never the content script. That is w
 | ----------------- | ------------------------------------------------------------------------------- |
 | `src/ai/`         | Providers, streaming, factory, safe JSON navigation                             |
 | `src/background/` | Service worker: context menus, tab messaging, port handler, Zod message schemas |
-| `src/content/`    | Content script: selection, replacement, shadow host, the card                   |
+| `src/content/`    | Content script: selection watcher, inline trigger, replacement, the card        |
 | `src/popup/`      | Toolbar popup (three tabs)                                                      |
 | `src/options/`    | Options page                                                                    |
 | `src/prompts/`    | Prompt definitions and adjustment phrasing                                      |

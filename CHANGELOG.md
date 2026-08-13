@@ -7,7 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — parity with Edge's "Rewrite with Copilot"
+
+The project always named Edge's Rewrite panel as its target, but the resemblance
+was two code comments and a palette described as "Fluent-derived" that matched no
+published Fluent ramp. These changes make it real.
+
+- **The rewrite is now offered inline.** A small **Rewrite** button appears beside
+  the selection the moment you select text in an editable field, as Edge's does —
+  no right-click, no menu hunting. This is the interaction that makes the feature
+  feel native, and it was the largest gap. The button lives in its own shadow
+  surface so it can persist while no card exists and vanish when one opens.
+- **The keyboard shortcut is `Ctrl+Shift+D`** (`Command+Shift+D` on macOS), was
+  `Alt+H`. The inline button shows the live binding rather than a hardcoded
+  string, so rebinding at `chrome://extensions/shortcuts` stays truthful.
+- **Editable fields only, as in Edge.** The feature is no longer offered over
+  read-only page text, where Replace could only fall back to a clipboard copy and
+  relabel itself "Copied instead" — a confusing thing to discover after the fact.
+  Every card that opens can now be applied. The context menu moved to
+  `contexts: ['editable']`; the tradeoff is that the submenu is now visible in a
+  text field even with nothing selected.
+- **Edge's exact tone list restored:** Professional, Casual, Enthusiastic,
+  **Informational**, Funny. An earlier fix for a mislabelled pill had replaced
+  `informational` with an invented `informal` + `neutral` pair. Format and length
+  already matched.
+- **Adjust options are text-only** and the three category tabs have proper inline
+  SVG icons, replacing sixteen emoji — the most conspicuously non-native detail in
+  the card. A sparkle glyph now leads the card header, as Edge's does.
+- The seven named actions (Improve Writing, Fix Grammar, Translate and the rest)
+  remain on the right-click menu; the inline button and the shortcut perform a
+  plain Rewrite, matching Edge's single action steered by Adjust.
+
+Edge's own wording — "Rewrite with Copilot" — is deliberately **not** copied.
+Copilot is a Microsoft trademark and using it would fail Chrome Web Store review
+for impersonating another product.
+
 ### Fixed
+
+- The content script no longer reads the settings object to get the theme. It
+  asks the worker for that one field, so the API key stays out of a process shared
+  with the page — the rule the codebase already documented and had quietly broken.
+- Replace and Copy stayed enabled after an error, offering to act on text the
+  output area had replaced with the error message.
+- Arrow keys in the Adjust tab strip changed the selection without moving DOM
+  focus, stranding keyboard users on an element that had just become untabbable.
+- The Copy button had no tooltip or accessible name, unlike its three siblings.
+- The "AI generated" chip hardcoded a raw colour instead of using a token.
+- Removed `CARD.maxHeight`, dead since the card-positioning fix.
 
 - **The floating card was invisible on most real sites.** Nothing in the codebase
   set a `z-index`, so the shadow host — positioned with `z-index: auto` — created

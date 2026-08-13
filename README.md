@@ -8,7 +8,7 @@
 
 **Rewrite AI** aims to feel like a native browser feature — inspired by Microsoft Edge's Rewrite tool, but open source, privacy-first, and provider-agnostic.
 
-- **Fast and minimal.** No chat interface, no sidebar.
+- **Fast and minimal.** No chat interface, no sidebar. The rewrite is offered inline the moment you select text.
 - **Floating card.** Rendered beside your selection inside an isolated Shadow DOM, so page styles never bleed in and its styles never leak out.
 - **Bring your own key.** No analytics, no telemetry, no accounts, no server relay. Requests go straight from the extension to the provider you configure.
 - **Seven providers.** OpenAI, Groq, Google Gemini, Anthropic Claude, OpenRouter, Ollama (local), and any OpenAI-compatible server.
@@ -17,22 +17,24 @@
 
 ## Using it
 
-1. **Select text** in an input, textarea, or contenteditable — Gmail, Slack, GitHub, Notion, Reddit, Discord and so on.
-2. **Press `Alt+H`**, or right-click and pick **Rewrite AI** → one of: Improve Writing, Fix Grammar, Make Professional, Make Friendly, Make Concise, Expand, Translate.
+Modelled on Microsoft Edge's **Rewrite with Copilot**, which offers itself the moment you select text rather than waiting to be found in a menu.
+
+1. **Select text** in any field you can type into — Gmail, Slack, GitHub, Notion, Reddit, Discord and so on.
+2. A small **Rewrite** button appears beside the selection. Click it, or press **`Ctrl+Shift+D`**. You can also right-click and pick **Rewrite AI** → one of: Improve Writing, Fix Grammar, Make Professional, Make Friendly, Make Concise, Expand, Translate.
 3. The **floating card** appears and streams the suggestion in.
 4. **Replace** (or `Ctrl+Enter`) swaps the text in place. **Copy** puts it on the clipboard. **Adjust** re-runs the request with a different tone, format, or length. **Regenerate** tries again.
 
-If the selection is somewhere the extension cannot write to — a read-only page, a canvas-based editor — the button reports **Copied instead** rather than claiming a replacement it did not make.
+The feature is offered **only in editable fields**, as Edge's is: if the result could not be written back, you are not offered the rewrite in the first place. Where a captured selection goes stale mid-rewrite, the button reports **Copied instead** rather than claiming a replacement it did not make.
 
 ### Adjust
 
 The Adjust drawer re-runs the rewrite with extra instructions:
 
-| Category | Options                                                      |
-| -------- | ------------------------------------------------------------ |
-| Tone     | Professional, Casual, Enthusiastic, Informal, Neutral, Funny |
-| Format   | Paragraph, Email, Ideas (bulleted), Blog post                |
-| Length   | Short, Medium, Long                                          |
+| Category | Options                                                  |
+| -------- | -------------------------------------------------------- |
+| Tone     | Professional, Casual, Enthusiastic, Informational, Funny |
+| Format   | Paragraph, Email, Ideas (bulleted), Blog post            |
+| Length   | Short, Medium, Long                                      |
 
 ### Popup
 
@@ -44,7 +46,7 @@ Clicking the toolbar icon opens a three-tab popup: **Setup** (provider, key, mod
 
 ```
 [ Webpage text selection ]
-          │  context menu click or Alt+H
+          │  inline button, Ctrl+Shift+D, or context menu
           ▼
 [ Background service worker ]  ── fetch ──▶  [ AI provider ]
           │  chrome.runtime port: CHUNK / DONE / ERROR

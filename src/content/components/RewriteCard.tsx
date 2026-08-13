@@ -70,7 +70,12 @@ export function RewriteCard({
     [],
   );
 
-  const canAct = Boolean(text) && !isGenerating;
+  /**
+   * Gated on `!error` as well: the output area shows the error *instead of* any
+   * text already streamed, so leaving Replace and Copy enabled offered to act on
+   * text the user could no longer see.
+   */
+  const canAct = Boolean(text) && !isGenerating && !error;
 
   const handleReplace = async () => {
     if (!text) return;

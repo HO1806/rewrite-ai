@@ -75,9 +75,10 @@ describe('constants', () => {
     const byValue = new Map(
       TONE_OPTIONS.map((option) => [option.value, option.label]),
     );
-    expect(byValue.get('neutral')).toBe('Neutral');
-    expect(byValue.get('informal')).toBe('Informal');
+    expect(byValue.get('informational')).toBe('Informational');
     expect(byValue.get('funny')).toBe('Funny');
+    // Edge offers exactly five; the invented Informal/Neutral pair is gone.
+    expect(TONE_OPTIONS).toHaveLength(5);
   });
 });
 

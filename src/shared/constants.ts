@@ -19,8 +19,11 @@ import type {
 /** Port name for streaming communication between background and content script */
 export const STREAM_PORT_NAME = 'rewrite-ai-stream';
 
-/** Shadow DOM host element ID */
+/** Shadow DOM host element ID for the floating card */
 export const SHADOW_HOST_ID = 'rewrite-ai-root';
+
+/** Shadow DOM host element ID for the inline trigger button */
+export const TRIGGER_HOST_ID = 'rewrite-ai-trigger';
 
 /** Storage keys */
 export const STORAGE_KEYS = {
@@ -71,12 +74,17 @@ export const CARD = {
    * height put the card above the text it was rewriting.
    */
   height: 220,
-  /** Worst-case height, with the adjust drawer open. */
-  maxHeight: 480,
   /** Gap between the selection and the card. */
   offset: 8,
   /** Minimum distance from any viewport edge. */
   margin: 10,
+} as const;
+
+/** Inline trigger button geometry, for the same edge clamping. */
+export const TRIGGER = {
+  width: 150,
+  height: 32,
+  offset: 6,
 } as const;
 
 /* ── Rewrite actions ── */
@@ -227,37 +235,41 @@ export function getDefaultModel(value: ProviderType): string {
 
 /* ── Adjust drawer options ── */
 
+/**
+ * An adjust option.
+ *
+ * Text only, no icon: Edge's options are plain labels, and the sixteen emoji
+ * this used to carry were the most conspicuously non-native detail in the card.
+ */
 export interface AdjustOption<T extends string> {
   readonly value: T;
   readonly label: string;
-  readonly icon: string;
 }
 
 /**
- * Labels here must describe what the prompt actually asks for.
- * Two of them previously did the opposite — the pill reading "Funny" sent
- * `neutral`, which instructs the model to be neutral and objective.
+ * The three option sets below are Edge's, verbatim and in its order. Labels must
+ * describe what the prompt actually asks for — one of these once read "Funny"
+ * while sending a value that instructed the model to be neutral and objective.
  */
 export const TONE_OPTIONS: readonly AdjustOption<ToneOption>[] = [
-  { value: 'professional', label: 'Professional', icon: '💼' },
-  { value: 'casual', label: 'Casual', icon: '😊' },
-  { value: 'enthusiastic', label: 'Enthusiastic', icon: '🎉' },
-  { value: 'informal', label: 'Informal', icon: '🙂' },
-  { value: 'neutral', label: 'Neutral', icon: 'ℹ️' },
-  { value: 'funny', label: 'Funny', icon: '😄' },
+  { value: 'professional', label: 'Professional' },
+  { value: 'casual', label: 'Casual' },
+  { value: 'enthusiastic', label: 'Enthusiastic' },
+  { value: 'informational', label: 'Informational' },
+  { value: 'funny', label: 'Funny' },
 ];
 
 export const FORMAT_OPTIONS: readonly AdjustOption<FormatOption>[] = [
-  { value: 'paragraph', label: 'Paragraph', icon: '📝' },
-  { value: 'email', label: 'Email', icon: '📧' },
-  { value: 'ideas', label: 'Ideas', icon: '💡' },
-  { value: 'blog', label: 'Blog post', icon: '📰' },
+  { value: 'paragraph', label: 'Paragraph' },
+  { value: 'email', label: 'Email' },
+  { value: 'ideas', label: 'Ideas' },
+  { value: 'blog', label: 'Blog post' },
 ];
 
 export const LENGTH_OPTIONS: readonly AdjustOption<LengthOption>[] = [
-  { value: 'short', label: 'Short', icon: '📏' },
-  { value: 'medium', label: 'Medium', icon: '📐' },
-  { value: 'long', label: 'Long', icon: '📜' },
+  { value: 'short', label: 'Short' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'long', label: 'Long' },
 ];
 
 /* ── Default settings ── */

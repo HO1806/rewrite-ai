@@ -42,7 +42,7 @@ describe('registerContextMenus', () => {
 });
 
 describe('rebuildContextMenus', () => {
-  it('creates a parent and one child per action, all selection-scoped', async () => {
+  it('creates a parent and one child per action, all editable-scoped', async () => {
     await rebuildContextMenus();
 
     const [parent, ...children] = chromeMock.createdMenus;
@@ -55,7 +55,9 @@ describe('rebuildContextMenus', () => {
     );
 
     for (const menu of chromeMock.createdMenus) {
-      expect(menu.contexts).toEqual(['selection']);
+      // Editable contexts only, matching Edge: every rewrite the menu offers can
+      // actually be written back.
+      expect(menu.contexts).toEqual(['editable']);
     }
   });
 

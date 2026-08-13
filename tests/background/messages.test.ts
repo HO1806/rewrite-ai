@@ -6,7 +6,7 @@ import {
   streamMessageSchema,
   streamRequestSchema,
 } from '@/background/messages';
-import { MAX_INPUT_LENGTH } from '@/shared/constants';
+import { MAX_INPUT_LENGTH, TONE_OPTIONS } from '@/shared/constants';
 
 describe('backgroundToContentMessageSchema', () => {
   it('accepts a rewrite request', () => {
@@ -128,17 +128,20 @@ describe('adjustParamsSchema', () => {
     expect(adjustParamsSchema.safeParse({}).success).toBe(true);
   });
 
+  /** Driven off the UI's own list so the two cannot drift. */
   it('accepts every tone the UI offers', () => {
-    for (const tone of [
-      'professional',
-      'casual',
-      'enthusiastic',
-      'informal',
-      'neutral',
-      'funny',
-    ]) {
-      expect(adjustParamsSchema.safeParse({ tone }).success).toBe(true);
+    for (const { value } of TONE_OPTIONS) {
+      expect(adjustParamsSchema.safeParse({ tone: value }).success).toBe(true);
     }
+  });
+
+  it('rejects the tones that were invented and then removed', () => {
+    expect(adjustParamsSchema.safeParse({ tone: 'informal' }).success).toBe(
+      false,
+    );
+    expect(adjustParamsSchema.safeParse({ tone: 'neutral' }).success).toBe(
+      false,
+    );
   });
 });
 

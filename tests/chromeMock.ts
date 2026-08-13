@@ -41,6 +41,8 @@ export interface ChromeMock {
   tabMessageError: string | null;
   /** Set to make chrome.scripting.executeScript reject. */
   executeScriptError: string | null;
+  /** Set to make chrome.runtime.sendMessage reject. */
+  runtimeMessageError: string | null;
   /**
    * Models the real content-script loader: injection resolves immediately while
    * the module graph is still loading, so the script only starts answering after
@@ -147,6 +149,7 @@ export function installChromeMock(): ChromeMock {
     tabMessageAttempts: 0,
     tabMessageError: null,
     executeScriptError: null,
+    runtimeMessageError: null,
     attemptsUntilContentScriptReady: null,
     manifest: {
       manifest_version: 3,
@@ -192,7 +195,35 @@ export function installChromeMock(): ChromeMock {
         addListener: (fn: (typeof state.listeners.message)[number]) =>
           state.listeners.message.push(fn),
       },
-      sendMessage: vi.fn(() => Promise.resolve()),
+      /**
+       * Routes to whatever registered `onMessage`, the way Chrome does.
+       *
+       * Returning a bare `undefined` here let tests pass without the receiving
+       * listener ever running — the theme bridge looked exercised when nothing
+       * had answered at all.
+       */
+      sendMessage: vi.fn((message: unknown) => {
+        if (state.runtimeMessageError) {
+          return Promise.reject(new Error(state.runtimeMessageError));
+        }
+
+        return new Promise((resolve) => {
+          let answered = false;
+          const respond = (value?: unknown) => {
+            if (answered) return;
+            answered = true;
+            resolve(value);
+          };
+
+          for (const listener of [...state.listeners.message]) {
+            // A listener returning true will reply asynchronously.
+            listener(message, { id: 'mock-id' }, respond);
+          }
+
+          // Nothing claimed it; Chrome resolves undefined.
+          if (!answered) queueMicrotask(() => respond(undefined));
+        });
+      }),
       connect: vi.fn(({ name }: { name: string }) => {
         const [client, server] = createPortPair(name);
         // Hand the server end to whatever registered onConnect.

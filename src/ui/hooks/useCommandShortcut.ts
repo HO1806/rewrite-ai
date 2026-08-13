@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 const COMMAND_NAME = 'improve-writing';
 
 /** Fallback matches the `suggested_key` in the manifest. */
-const DEFAULT_SHORTCUT = 'Alt+H';
+const DEFAULT_SHORTCUT = 'Ctrl+Shift+D';
 
 export function useCommandShortcut(): {
   shortcut: string;

@@ -53,6 +53,48 @@ export function RegenerateIcon({ size = 14 }: IconProps) {
   );
 }
 
+/** The leading mark on the card header and the trigger, as Edge has. */
+export function SparkleIcon({ size = 14 }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={1.6}>
+      <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z" />
+      <path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+    </svg>
+  );
+}
+
+export function ToneIcon({ size = 13 }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={2}>
+      <path d="M12 3v10" />
+      <path d="M9 13a3 3 0 1 0 6 0" />
+      <path d="M5 11v1a7 7 0 0 0 14 0v-1" />
+      <path d="M12 19v2" />
+    </svg>
+  );
+}
+
+export function FormatIcon({ size = 13 }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={2}>
+      <path d="M5 5h14" />
+      <path d="M5 10h14" />
+      <path d="M5 15h9" />
+      <path d="M5 20h5" />
+    </svg>
+  );
+}
+
+export function LengthIcon({ size = 13 }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={2}>
+      <path d="M4 12h16" />
+      <path d="M4 8v8" />
+      <path d="M20 8v8" />
+    </svg>
+  );
+}
+
 export function CloseIcon({ size = 14 }: IconProps) {
   return (
     <svg {...base(size)} strokeWidth={2}>

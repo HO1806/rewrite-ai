@@ -1,13 +1,16 @@
 /**
- * Shadow DOM container for the floating card.
+ * Shadow DOM containers for the extension's in-page surfaces.
  *
- * The card renders inside a shadow root so the host page's styles cannot reach
- * it and its own styles cannot leak out.
+ * Each surface — the floating card, the inline trigger button — gets its own
+ * host and its own shadow root, so the host page's styles cannot reach them and
+ * theirs cannot leak out. They are separate hosts rather than one shared root
+ * because the trigger must stay alive while no card exists, and vanish when one
+ * opens.
  */
 
-import { SHADOW_HOST_ID } from '@/shared/constants';
 import tokensCss from '@/styles/tokens.css?inline';
 import cardCss from '@/styles/card.css?inline';
+import triggerCss from '@/styles/trigger.css?inline';
 
 const MOUNT_ID = 'rewrite-ai-mount';
 
@@ -25,11 +28,11 @@ export interface ShadowContainer {
  * whose root has been discarded is what previously left the card permanently
  * invisible after the host page removed the element.
  */
-export function createShadowContainer(): ShadowContainer {
-  removeShadowContainer();
+export function createShadowContainer(hostId: string): ShadowContainer {
+  removeShadowContainer(hostId);
 
   const host = document.createElement('div');
-  host.id = SHADOW_HOST_ID;
+  host.id = hostId;
   /**
    * The host occupies no space; the card inside is position: fixed.
    *
@@ -70,6 +73,8 @@ export function createShadowContainer(): ShadowContainer {
  */
 function createStyleSheet(): HTMLStyleElement {
   const style = document.createElement('style');
+  // Both surfaces get the whole sheet. It is a few kilobytes already inlined in
+  // this bundle, and splitting it per surface buys nothing.
   style.textContent = `
     :host {
       all: initial;
@@ -77,10 +82,11 @@ function createStyleSheet(): HTMLStyleElement {
     }
     ${tokensCss}
     ${cardCss}
+    ${triggerCss}
   `;
   return style;
 }
 
-export function removeShadowContainer(): void {
-  document.getElementById(SHADOW_HOST_ID)?.remove();
+export function removeShadowContainer(hostId: string): void {
+  document.getElementById(hostId)?.remove();
 }

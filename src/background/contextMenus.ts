@@ -22,6 +22,17 @@ import { ACTIONS } from '@/shared/constants';
 
 const PARENT_ID = 'rewrite-ai-parent';
 
+/**
+ * Editable contexts only, matching Edge — every rewrite the menu offers can then
+ * actually be written back.
+ *
+ * Chrome cannot AND two contexts, so `['editable']` is the closest available
+ * match to "an editable field with something selected". The tradeoff is that the
+ * submenu is now visible in a text field even with nothing selected; the click
+ * handler still requires `info.selectionText`, so it does nothing in that case.
+ */
+const MENU_CONTEXTS: chrome.contextMenus.ContextType[] = ['editable'];
+
 /** Tail of the rebuild queue. Concurrent callers chain rather than interleave. */
 let pending: Promise<void> = Promise.resolve();
 
@@ -46,7 +57,7 @@ async function build(): Promise<void> {
   const parentCreated = await createMenu({
     id: PARENT_ID,
     title: 'Rewrite AI',
-    contexts: ['selection'],
+    contexts: MENU_CONTEXTS,
   });
 
   // Without the parent every child fails with "Cannot find menu item". Report
@@ -63,7 +74,7 @@ async function build(): Promise<void> {
       id: action.id,
       parentId: PARENT_ID,
       title: action.label,
-      contexts: ['selection'],
+      contexts: MENU_CONTEXTS,
     });
   }
 }

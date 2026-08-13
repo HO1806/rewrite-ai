@@ -7,7 +7,7 @@
  * One generic handler and one pill list now cover all three.
  */
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { AdjustParams } from '@/shared/types';
 import { AdjustCategory, CATEGORY_TABS } from './adjustCategories';
 
@@ -24,6 +24,7 @@ export function AdjustDrawer({
 }: AdjustDrawerProps) {
   const [activeKey, setActiveKey] = useState<AdjustCategory>('tone');
   const idPrefix = useId();
+  const tablistRef = useRef<HTMLDivElement>(null);
 
   const activeTab =
     CATEGORY_TABS.find((tab) => tab.key === activeKey) ?? CATEGORY_TABS[0]!;
@@ -33,18 +34,33 @@ export function AdjustDrawer({
     onChange({ ...params, [key]: params[key] === value ? undefined : value });
   };
 
+  /**
+   * Move both the selection and DOM focus.
+   *
+   * Focus has to move too: with a roving tabIndex the previously focused tab
+   * becomes `tabIndex={-1}` the moment the selection changes, so leaving focus
+   * behind strands the user on an untabbable element.
+   */
   const moveFocus = (offset: number) => {
     const index = CATEGORY_TABS.findIndex((tab) => tab.key === activeKey);
     const next =
       CATEGORY_TABS[
         (index + offset + CATEGORY_TABS.length) % CATEGORY_TABS.length
       ];
-    if (next) setActiveKey(next.key);
+    if (!next) return;
+
+    setActiveKey(next.key);
+    tablistRef.current
+      ?.querySelector<HTMLElement>(
+        `#${CSS.escape(`${idPrefix}-tab-${next.key}`)}`,
+      )
+      ?.focus();
   };
 
   return (
     <div className="card__drawer">
       <div
+        ref={tablistRef}
         className="card__tablist"
         role="tablist"
         aria-label="Adjust the rewrite"
@@ -71,7 +87,7 @@ export function AdjustDrawer({
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveKey(tab.key)}
             >
-              <span aria-hidden="true">{tab.icon}</span>
+              <tab.Icon />
               <span>{tab.label}</span>
               {selectedValue && (
                 <>
@@ -103,8 +119,7 @@ export function AdjustDrawer({
               disabled={isDisabled}
               onClick={() => select(activeTab.key, option.value)}
             >
-              <span aria-hidden="true">{option.icon}</span>
-              <span>{option.label}</span>
+              {option.label}
             </button>
           );
         })}

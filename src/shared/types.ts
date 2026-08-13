@@ -75,8 +75,15 @@ export type StreamMessage =
   | { type: 'DONE'; fullText: string }
   | { type: 'ERROR'; message: string };
 
+/**
+ * Edge's five tones, verbatim.
+ *
+ * An earlier pass replaced `informational` with an invented `informal` +
+ * `neutral` pair while fixing a mislabelled pill. Edge offers exactly these
+ * five, and matching it is the point.
+ */
 export type ToneOption =
-  'professional' | 'casual' | 'enthusiastic' | 'informal' | 'neutral' | 'funny';
+  'professional' | 'casual' | 'enthusiastic' | 'informational' | 'funny';
 export type FormatOption = 'paragraph' | 'email' | 'ideas' | 'blog';
 export type LengthOption = 'short' | 'medium' | 'long';
 

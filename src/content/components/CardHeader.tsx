@@ -1,6 +1,6 @@
 import { getAction } from '@/shared/constants';
 import type { RewriteAction } from '@/shared/types';
-import { CloseIcon } from './icons';
+import { CloseIcon, SparkleIcon } from './icons';
 
 interface CardHeaderProps {
   action: RewriteAction;
@@ -12,6 +12,10 @@ export function CardHeader({ action, titleId, onClose }: CardHeaderProps) {
   return (
     <div className="card__header">
       <div className="card__heading">
+        {/* The leading mark Edge puts before the suggestion. */}
+        <span className="card__sparkle">
+          <SparkleIcon />
+        </span>
         <span className="card__title" id={titleId}>
           {getAction(action).cardTitle}
         </span>

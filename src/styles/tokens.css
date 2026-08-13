@@ -34,6 +34,9 @@
   --text-secondary: oklch(80% 0 0);
   --text-muted: oklch(66% 0 0);
   --text-on-accent: oklch(100% 0 0);
+  /* The "AI generated" chip, which sits darker than any surface. */
+  --surface-inverse: oklch(0% 0 0);
+  --text-on-inverse: oklch(97% 0 0);
 
   /* ── Accent ── */
   --accent: oklch(52% 0.15 253);
@@ -116,6 +119,9 @@
 
   --accent-soft: oklch(94% 0.03 253);
   --accent-text: oklch(45% 0.16 253);
+
+  --surface-inverse: oklch(30% 0 0);
+  --text-on-inverse: oklch(100% 0 0);
 
   --shadow-sm: 0 2px 8px oklch(24% 0.015 262 / 0.08);
   --shadow-lg:

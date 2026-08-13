@@ -18,8 +18,7 @@ const TONE_PHRASES: Record<ToneOption, string> = {
   professional: 'Use a professional and formal tone',
   casual: 'Use a casual and conversational tone',
   enthusiastic: 'Use an enthusiastic and energetic tone',
-  informal: 'Use an informal and relaxed tone',
-  neutral: 'Use a neutral and objective tone',
+  informational: 'Use an informational, factual, neutral tone',
   funny: 'Use a light, humorous tone, without undercutting the message',
 };
 

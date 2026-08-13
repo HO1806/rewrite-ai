@@ -8,12 +8,11 @@
  */
 
 import { backgroundToContentMessageSchema } from '@/background/messages';
-import { resolveTheme } from '@/shared/theme';
-import { loadSettings } from '@/storage/settings';
 import { RewriteCard } from './components/RewriteCard';
-import { applyCardTheme, mountCard } from './mount';
-import { getSelectionInfo } from './selection';
-import { CARD } from '@/shared/constants';
+import { applySurfaceTheme, mountSurface } from './mount';
+import { getEditableSelectionInfo } from './selection';
+import { loadResolvedTheme } from './theme';
+import { hideInlineTrigger, registerInlineTrigger } from './trigger';
 import type { RewriteAction, SelectionInfo } from '@/shared/types';
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -32,8 +31,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   try {
-    const { type, action } = parsed.data;
-    openCard(action, type === 'REWRITE_REQUEST' ? parsed.data.text : undefined);
+    openCardFromSelection(parsed.data.action);
     sendResponse({ status: 'ok' });
   } catch (err: unknown) {
     console.warn('[Rewrite AI] Could not open the rewrite card:', err);
@@ -44,11 +42,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-function openCard(action: RewriteAction, contextMenuText?: string): void {
-  const selectionInfo = buildSelectionInfo(contextMenuText);
+// The inline offer, Edge's defining interaction.
+registerInlineTrigger((selectionInfo) => openCard('improve', selectionInfo));
+
+/**
+ * Open the card for whatever is selected now.
+ *
+ * The context menu passes its own `selectionText`, but it is not used as a
+ * fallback any more: without a live, measurable selection there is nothing to
+ * write back into, and a card that cannot apply its result is worse than no card.
+ */
+function openCardFromSelection(action: RewriteAction): void {
+  const selectionInfo = getEditableSelectionInfo();
   if (!selectionInfo) return;
 
-  mountCard((close) => (
+  openCard(action, selectionInfo);
+}
+
+function openCard(action: RewriteAction, selectionInfo: SelectionInfo): void {
+  hideInlineTrigger();
+
+  mountSurface('card', (close) => (
     <RewriteCard
       selectionInfo={selectionInfo}
       initialAction={action}
@@ -57,42 +71,5 @@ function openCard(action: RewriteAction, contextMenuText?: string): void {
   ));
 
   // Theme is applied after mount so the card does not flash the wrong palette.
-  void loadSettings()
-    .then((settings) => applyCardTheme(resolveTheme(settings.theme)))
-    .catch(() => applyCardTheme('dark'));
-}
-
-/**
- * Resolve what to rewrite.
- *
- * The live selection is preferred; the context menu's `selectionText` is a
- * fallback for the cases where the browser has already cleared it.
- */
-function buildSelectionInfo(contextMenuText?: string): SelectionInfo | null {
-  const live = getSelectionInfo();
-
-  if (live) {
-    // Trust the live selection's text unless the menu passed something longer
-    // (the browser truncates neither, but they can disagree across frames).
-    return contextMenuText && !live.text
-      ? { ...live, text: contextMenuText }
-      : live;
-  }
-
-  if (!contextMenuText) return null;
-
-  // No measurable selection in this frame: centre the card horizontally rather
-  // than pinning it to a hardcoded 100,100 in the top-left corner.
-  return {
-    text: contextMenuText,
-    range: null,
-    element: null,
-    elementType: 'unknown',
-    position: {
-      top: CARD.margin * 4,
-      left: Math.max(CARD.margin, (window.innerWidth - CARD.width) / 2),
-    },
-    selectionStart: null,
-    selectionEnd: null,
-  };
+  void loadResolvedTheme().then((theme) => applySurfaceTheme('card', theme));
 }

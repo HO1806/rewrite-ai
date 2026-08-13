@@ -7,9 +7,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerStreamHandler } from '@/background/streamHandler';
-import { CARD, DEFAULT_SETTINGS, SHADOW_HOST_ID } from '@/shared/constants';
+import { registerThemeBridge } from '@/background/themeBridge';
+import { DEFAULT_SETTINGS, SHADOW_HOST_ID } from '@/shared/constants';
 import { saveSettings, settingsSchema } from '@/storage/settings';
-import { unmountCard } from '@/content/mount';
+import { unmountSurface } from '@/content/mount';
 import { chromeMock } from '../setup';
 import { sseResponse, stubFetchEach } from '../helpers/http';
 
@@ -45,6 +46,7 @@ function cardText(): string {
 beforeEach(async () => {
   document.body.innerHTML = '';
   registerStreamHandler();
+  registerThemeBridge();
   stubFetchEach(() => sseResponse(['data: [DONE]']));
   await saveSettings(
     settingsSchema.parse({ ...DEFAULT_SETTINGS, apiKey: 'sk-test' }),
@@ -52,13 +54,26 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  unmountCard();
+  unmountSurface('card');
   await settle();
   document.body.innerHTML = '';
 });
 
+/** A focused textarea with a selection — the only thing that opens a card now. */
+function selectInTextarea(
+  value = 'their going to the meating',
+): HTMLTextAreaElement {
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.setSelectionRange(0, value.length);
+  return textarea;
+}
+
 describe('REWRITE_REQUEST', () => {
-  it('opens the card with the text the context menu supplied', async () => {
+  it('opens the card for a selection in an editable field', async () => {
+    selectInTextarea();
     const listener = await loadContentScript();
     const respond = vi.fn();
 
@@ -74,6 +89,7 @@ describe('REWRITE_REQUEST', () => {
   });
 
   it('uses the action from the message', async () => {
+    selectInTextarea();
     const listener = await loadContentScript();
 
     listener(
@@ -87,14 +103,41 @@ describe('REWRITE_REQUEST', () => {
   });
 
   /**
-   * When the selection is unmeasurable in this frame the card is centred rather
-   * than pinned to a hardcoded 100,100 in the top-left corner.
+   * Matching Edge, the feature is offered only where it can write back. A card
+   * that opens over read-only text can only fall back to a clipboard copy and
+   * relabel itself "Copied instead" — a confusing thing to discover after the
+   * fact, so it no longer opens at all.
    */
-  it('centres the card when there is no measurable selection', async () => {
-    Object.defineProperty(window, 'innerWidth', {
-      value: 1200,
-      configurable: true,
-    });
+  it('does not open for a selection that cannot be written back to', async () => {
+    const paragraph = document.createElement('p');
+    paragraph.textContent = 'read-only article text';
+    document.body.appendChild(paragraph);
+
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    const listener = await loadContentScript();
+    const respond = vi.fn();
+
+    listener(
+      {
+        type: 'REWRITE_REQUEST',
+        action: 'improve',
+        text: 'read-only article text',
+      },
+      {},
+      respond,
+    );
+    await settle();
+
+    expect(host()).toBeNull();
+    expect(respond).toHaveBeenCalledWith({ status: 'ok' });
+  });
+
+  it('does not open when the context menu supplies text but nothing is selected', async () => {
     const listener = await loadContentScript();
 
     listener(
@@ -104,11 +147,10 @@ describe('REWRITE_REQUEST', () => {
     );
     await settle();
 
-    const card = host()!.shadowRoot!.querySelector<HTMLElement>('.card')!;
-    expect(card.style.left).toBe(`${(1200 - CARD.width) / 2}px`);
+    expect(host()).toBeNull();
   });
 
-  it('prefers a live selection over the menu text', async () => {
+  it('rewrites the live selection, not the text the menu passed', async () => {
     const textarea = document.createElement('textarea');
     textarea.value = 'live selection text';
     document.body.appendChild(textarea);
@@ -185,6 +227,7 @@ describe('message validation', () => {
   });
 
   it('returns false for a handled message, having answered synchronously', async () => {
+    selectInTextarea();
     const listener = await loadContentScript();
 
     const result = listener(
@@ -207,6 +250,7 @@ describe('theming', () => {
         theme: 'light',
       }),
     );
+    selectInTextarea();
     const listener = await loadContentScript();
 
     listener(
@@ -219,11 +263,12 @@ describe('theming', () => {
     expect(host()!.getAttribute('data-theme')).toBe('light');
   });
 
-  it('falls back to the dark palette when settings cannot be read', async () => {
+  it('falls back to the dark palette when the worker cannot be reached', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.mocked(chrome.storage.local.get).mockRejectedValueOnce(
-      new Error('storage unavailable'),
-    );
+    // The content script asks the worker for the theme rather than reading
+    // settings itself, so this is the failure that matters.
+    chromeMock.runtimeMessageError = 'Could not establish connection.';
+    selectInTextarea();
     const listener = await loadContentScript();
 
     listener(

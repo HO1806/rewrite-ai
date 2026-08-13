@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  applyCardTheme,
-  isCardMounted,
-  mountCard,
-  unmountCard,
+  applySurfaceTheme,
+  isSurfaceMounted,
+  mountSurface,
+  unmountSurface,
 } from '@/content/mount';
 import { SHADOW_HOST_ID } from '@/shared/constants';
 
@@ -26,14 +26,14 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  unmountCard();
+  unmountSurface('card');
   await settle();
   document.body.innerHTML = '';
 });
 
 describe('mountCard', () => {
   it('renders into a shadow root', async () => {
-    mountCard(() => <p>hello card</p>);
+    mountSurface('card', () => <p>hello card</p>);
     await settle();
 
     expect(host()).not.toBeNull();
@@ -42,7 +42,7 @@ describe('mountCard', () => {
   });
 
   it('injects the stylesheet into the shadow root', async () => {
-    mountCard(() => <p>styled</p>);
+    mountSurface('card', () => <p>styled</p>);
     await settle();
 
     const style = host()!.shadowRoot!.querySelector('style');
@@ -52,7 +52,7 @@ describe('mountCard', () => {
 
   it('hands the close callback to the render function', async () => {
     let close = () => {};
-    mountCard((onClose) => {
+    mountSurface('card', (onClose) => {
       close = onClose;
       return <p>closable</p>;
     });
@@ -62,13 +62,13 @@ describe('mountCard', () => {
     await settle();
 
     expect(host()).toBeNull();
-    expect(isCardMounted()).toBe(false);
+    expect(isSurfaceMounted('card')).toBe(false);
   });
 
   it('replaces an existing card rather than stacking two', async () => {
-    mountCard(() => <p>first</p>);
+    mountSurface('card', () => <p>first</p>);
     await settle();
-    mountCard(() => <p>second</p>);
+    mountSurface('card', () => <p>second</p>);
     await settle();
 
     expect(document.querySelectorAll(`#${SHADOW_HOST_ID}`)).toHaveLength(1);
@@ -83,14 +83,14 @@ describe('mountCard', () => {
    * the card was silently dead for the rest of the page's life.
    */
   it('still renders after the host element is removed externally', async () => {
-    mountCard(() => <p>first</p>);
+    mountSurface('card', () => <p>first</p>);
     await settle();
 
     // Simulate an SPA route change wiping the body.
     document.body.innerHTML = '';
     expect(host()).toBeNull();
 
-    mountCard(() => <p>after external removal</p>);
+    mountSurface('card', () => <p>after external removal</p>);
     await settle();
 
     expect(host()).not.toBeNull();
@@ -100,7 +100,7 @@ describe('mountCard', () => {
   it('recovers when the whole document body is replaced repeatedly', async () => {
     for (const label of ['one', 'two', 'three']) {
       document.body.innerHTML = '';
-      mountCard(() => <p>{label}</p>);
+      mountSurface('card', () => <p>{label}</p>);
       await settle();
       expect(cardText()).toContain(label);
     }
@@ -109,17 +109,17 @@ describe('mountCard', () => {
 
 describe('unmountCard', () => {
   it('removes the host', async () => {
-    mountCard(() => <p>x</p>);
+    mountSurface('card', () => <p>x</p>);
     await settle();
 
-    unmountCard();
+    unmountSurface('card');
     await settle();
 
     expect(host()).toBeNull();
   });
 
   it('is safe to call when nothing is mounted', () => {
-    expect(() => unmountCard()).not.toThrow();
+    expect(() => unmountSurface('card')).not.toThrow();
   });
 
   it('clears a host left behind by an earlier page state', async () => {
@@ -127,7 +127,7 @@ describe('unmountCard', () => {
     orphan.id = SHADOW_HOST_ID;
     document.body.appendChild(orphan);
 
-    unmountCard();
+    unmountSurface('card');
     await settle();
 
     expect(host()).toBeNull();
@@ -136,17 +136,17 @@ describe('unmountCard', () => {
 
 describe('applyCardTheme', () => {
   it('sets the theme attribute on the shadow host', async () => {
-    mountCard(() => <p>themed</p>);
+    mountSurface('card', () => <p>themed</p>);
     await settle();
 
-    applyCardTheme('light');
+    applySurfaceTheme('card', 'light');
     expect(host()!.getAttribute('data-theme')).toBe('light');
 
-    applyCardTheme('dark');
+    applySurfaceTheme('card', 'dark');
     expect(host()!.getAttribute('data-theme')).toBe('dark');
   });
 
   it('is a no-op when nothing is mounted', () => {
-    expect(() => applyCardTheme('light')).not.toThrow();
+    expect(() => applySurfaceTheme('card', 'light')).not.toThrow();
   });
 });

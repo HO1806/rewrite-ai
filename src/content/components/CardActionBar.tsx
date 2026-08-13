@@ -80,6 +80,7 @@ export function CardActionBar({
         className="card__button"
         onClick={onCopy}
         disabled={!canAct}
+        title="Copy the suggestion"
       >
         {isCopied ? '✓ Copied' : 'Copy'}
       </button>
