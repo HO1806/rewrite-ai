@@ -1,0 +1,158 @@
+/**
+ * Design tokens.
+ *
+ * One source of truth for every surface. The extension previously had three
+ * unrelated hardcoded palettes — a slate-dark popup, a Fluent-neutral card and
+ * a plain white options page — sharing no colour, radius or type scale, plus a
+ * 70-line Tailwind config full of tokens that nothing ever consumed.
+ *
+ * The selector covers `:host` as well as `:root` so the same tokens apply
+ * inside the content script's shadow root, where `all: initial` severs
+ * inheritance from the host page.
+ */
+
+:root,
+:host {
+  /* ── Neutrals: the card's Fluent-derived ramp, kept as the shared base ── */
+  --surface-base: oklch(23% 0 0);
+  --surface-raised: oklch(28% 0 0);
+  --surface-sunken: oklch(20% 0 0);
+  --surface-hover: oklch(33% 0 0);
+
+  --border-subtle: oklch(31% 0 0);
+  --border-default: oklch(38% 0 0);
+  --border-strong: oklch(46% 0 0);
+
+  --text-primary: oklch(97% 0 0);
+  --text-secondary: oklch(80% 0 0);
+  --text-muted: oklch(66% 0 0);
+  --text-on-accent: oklch(100% 0 0);
+
+  /* ── Accent ── */
+  --accent: oklch(52% 0.15 253);
+  --accent-hover: oklch(58% 0.16 253);
+  --accent-soft: oklch(34% 0.08 253);
+  --accent-text: oklch(78% 0.13 253);
+
+  /* ── Status ── */
+  --success: oklch(65% 0.18 150);
+  --danger: oklch(70% 0.19 25);
+
+  /* ── Type scale ── */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  --text-2xs: 0.625rem;
+  --text-xs: 0.6875rem;
+  --text-sm: 0.75rem;
+  --text-base: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.125rem;
+
+  /* ── Spacing ── */
+  --space-1: 0.25rem;
+  --space-2: 0.375rem;
+  --space-3: 0.5rem;
+  --space-4: 0.625rem;
+  --space-5: 0.75rem;
+  --space-6: 1rem;
+  --space-7: 1.25rem;
+  --space-8: 1.5rem;
+
+  /* ── Radii ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-pill: 100px;
+
+  /* ── Elevation ── */
+  --shadow-sm: 0 2px 8px oklch(0% 0 0 / 0.25);
+  --shadow-lg: 0 16px 36px oklch(0% 0 0 / 0.55), 0 0 1px oklch(100% 0 0 / 0.1);
+  --shadow-accent-glow: 0 2px 8px oklch(52% 0.15 253 / 0.4);
+
+  /* ── Motion ── */
+  --duration-fast: 120ms;
+  --duration-normal: 150ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Focus ── */
+  --focus-ring: 2px solid var(--accent-text);
+  --focus-ring-offset: 2px;
+}
+
+/**
+ * Light theme.
+ *
+ * Applied by setting `data-theme="light"` on the surface root. This is what
+ * makes the stored `theme` setting mean something — it was persisted and
+ * validated but read nowhere, against three hardcoded palettes.
+ */
+:root[data-theme='light'],
+:host([data-theme='light']),
+[data-theme='light'] {
+  --surface-base: oklch(100% 0 0);
+  --surface-raised: oklch(98% 0.003 250);
+  --surface-sunken: oklch(96% 0.005 250);
+  --surface-hover: oklch(94% 0.007 250);
+
+  --border-subtle: oklch(92% 0.008 250);
+  --border-default: oklch(87% 0.01 250);
+  --border-strong: oklch(78% 0.015 250);
+
+  --text-primary: oklch(24% 0.015 262);
+  --text-secondary: oklch(44% 0.02 258);
+  --text-muted: oklch(56% 0.025 256);
+
+  --accent-soft: oklch(94% 0.03 253);
+  --accent-text: oklch(45% 0.16 253);
+
+  --shadow-sm: 0 2px 8px oklch(24% 0.015 262 / 0.08);
+  --shadow-lg:
+    0 16px 36px oklch(24% 0.015 262 / 0.16), 0 0 1px oklch(24% 0.015 262 / 0.1);
+}
+
+/* ── Shared primitives ── */
+
+@keyframes rewrite-ai-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes rewrite-ai-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/**
+ * Honour the OS motion preference.
+ *
+ * Nothing in the extension previously checked this, including an 800ms infinite
+ * spinner.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  :host {
+    --duration-fast: 1ms;
+    --duration-normal: 1ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

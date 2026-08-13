@@ -1,0 +1,82 @@
+# Rewrite AI — project context
+
+Chrome MV3 extension that rewrites selected text via one of seven AI providers.
+TypeScript, React 18, Vite, `@crxjs/vite-plugin`, pnpm. No backend.
+
+## Commands
+
+```bash
+pnpm verify          # typecheck + lint + format:check + test + build — the gate
+pnpm dev             # Vite dev server with HMR
+pnpm build           # production build into dist/
+pnpm test            # unit tests
+pnpm test:coverage   # tests with 80% thresholds enforced
+pnpm typecheck       # tsc on src+tests, then on the config files
+pnpm lint / lint:fix
+pnpm format / format:check
+pnpm check-version   # tag vs package.json vs manifest.json
+```
+
+Node >= 20, pnpm >= 9 (the lockfile is v9; **pnpm 8 cannot read it**).
+
+Loading the built extension: `chrome://extensions` → Developer mode → Load unpacked → `dist/`.
+
+## How a rewrite flows
+
+```
+context menu click / Alt+H
+  → background/index.ts        resolves the action, delivers to the tab
+  → background/tabs.ts         injects the content script if the tab lacks one, then resends
+  → content/index.tsx          validates the message, opens the card
+  → content/mount.ts           builds a shadow host + React root as a pair
+  → RewriteCard                useStreamingRewrite opens a chrome.runtime port
+  → background/streamHandler   validates, builds a provider, streams
+  → ai/providers/*             fetch with an AbortSignal
+  → ai/stream.ts               parses SSE or NDJSON into text chunks
+  ← port messages              CHUNK* → DONE, or ERROR
+  → content/replace.ts         writes the result back into the page
+```
+
+The **fetch happens in the service worker**, never the content script. That is what keeps the API key out of page processes.
+
+## Layout
+
+| Path              | Holds                                                          |
+| ----------------- | -------------------------------------------------------------- |
+| `src/ai/`         | Providers, streaming, factory, safe JSON navigation            |
+| `src/background/` | Service worker: context menus, tab messaging, port handler, Zod message schemas |
+| `src/content/`    | Content script: selection, replacement, shadow host, the card   |
+| `src/popup/`      | Toolbar popup (three tabs)                                     |
+| `src/options/`    | Options page                                                   |
+| `src/prompts/`    | Prompt definitions and adjustment phrasing                     |
+| `src/shared/`     | Constants, types, theme resolution, error narrowing            |
+| `src/storage/`    | `chrome.storage` wrapper and the settings schema               |
+| `src/styles/`     | Design tokens and per-surface stylesheets                      |
+| `src/ui/`         | Components and hooks shared by popup and options               |
+
+## Conventions
+
+- **No `any` anywhere in `src/`.** ESLint enforces it. For provider responses use `dig`/`digString` from `src/ai/json.ts`; for caught values use `getErrorMessage` from `src/shared/errors.ts`.
+- **Validate at boundaries with Zod.** `src/background/messages.ts` covers every cross-process message; `src/storage/settings.ts` covers persisted settings. New message type → new schema, `satisfies z.ZodType<TheSharedType>`.
+- **One definition per fact.** `PROVIDERS` and `ACTIONS` in `src/shared/constants.ts` are the single sources for labels, default models and card titles. This file exists because those were previously defined in three or four places and had drifted.
+- **Style with tokens.** No hex values in components. `src/styles/tokens.css` defines the palette (oklch), type scale, spacing, radii, durations. It is loaded into the shadow root via `?inline`.
+- **Errors are explicit.** No empty catch. If a fallback changes what the user gets, the UI must say so — see `ReplaceOutcome`.
+
+## MV3 gotchas that have already bitten this codebase
+
+1. **Never hardcode a bundler output path.** Vite content hashes change every build. Read paths from `chrome.runtime.getManifest()`. A hardcoded `assets/index.tsx-loader-<hash>.js` silently broke content-script recovery for every rebuild.
+2. **The service worker is terminated when idle.** Register on `onInstalled` + `onStartup`; never as a bare top-level side effect. A top-level `setupContextMenus()` re-ran on every wake and raced the install handler into a duplicate-id error.
+3. **Always register `port.onDisconnect`.** The card disconnects its port on every Adjust click, Regenerate and unmount. Without a disconnect handler the streaming loop posts to a dead port, throws, and the catch block posts to the same dead port and throws again — an unhandled rejection in the worker.
+4. **Thread an `AbortSignal` into every `fetch`.** Otherwise an abandoned generation keeps streaming from a paid API. `reader.cancel()`, not just `releaseLock()`.
+5. **Check `chrome.runtime.lastError`** after callback-style APIs, or failures are completely invisible.
+6. **The card is `position: fixed`,** so coordinates are viewport-relative. Adding `window.scrollY` puts it off-screen.
+7. **Providers report errors inside HTTP 200 streams.** Give every parser an `extractError`, or output truncates silently.
+8. **The API key belongs in the worker.** Do not import `loadSettings` into anything under `src/content/`.
+9. **Selection APIs throw on `input[type=email|number]`.** Only text, search, url, tel and password support them.
+10. **Register card key handlers in the capture phase and stop propagation.** Otherwise `Ctrl+Enter` also fires the host page's binding, which in Gmail and Slack sends the message.
+
+## Testing
+
+`tests/` mirrors `src/`. `tests/chromeMock.ts` is the Chrome API double and provides connected port pairs — prefer driving the real modules across a port (card → stream handler → stubbed fetch) over mocking the seam away. `tests/helpers/http.ts` builds SSE/NDJSON responses; use `stubFetchEach` when a test issues more than one request, since a `Response` body can only be read once.
+
+Coverage thresholds are enforced at 80% in `vite.config.ts` and currently sit around 96%.

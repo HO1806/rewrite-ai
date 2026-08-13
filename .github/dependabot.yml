@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR per ecosystem keeps the review surface manageable.
+      dev-dependencies:
+        dependency-type: development
+        update-types: ['minor', 'patch']
+      production-dependencies:
+        dependency-type: production
+        update-types: ['minor', 'patch']
+    ignore:
+      # The MV3 build depends on this plugin's exact behaviour; a caret range on
+      # it once resolved a prerelease specifier to a stable major silently.
+      - dependency-name: '@crxjs/vite-plugin'
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: monthly

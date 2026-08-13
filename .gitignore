@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.crx
+*.pem
+*.zip
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+
+# Vite
+*.local
+
+# Claude Code — local overrides and scratch space stay out of the repo.
+# .claude/ itself is committed: it carries the project's shared context.
+.claude/settings.local.json
+.claude/.scratch/
+.playwright-mcp/
+
+# Store listing images: large, and regenerated rather than edited.
+# See store-assets/README.md. They stay on disk, out of git history.
+store-assets/*.png

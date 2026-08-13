@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    # Required by action-gh-release to create the release. Without it the
+    # default GITHUB_TOKEN is read-only and the step fails with a 403 —
+    # passing the token via `env` does not grant the scope.
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Fail before publishing anything if the tag, package.json and
+      # manifest.json disagree about the version.
+      - name: Verify the tag matches the manifest
+        run: node scripts/sync-version.mjs --check --tag "${{ github.ref_name }}"
+
+      - name: Verify
+        run: pnpm verify
+
+      - name: Package extension
+        run: |
+          cd dist
+          zip -r "../rewrite-ai-${{ github.ref_name }}.zip" .
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: rewrite-ai-${{ github.ref_name }}.zip
+          generate_release_notes: true

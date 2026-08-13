@@ -1,0 +1,305 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { copyToClipboard, replaceSelectedText } from '@/content/replace';
+import type { SelectionInfo } from '@/shared/types';
+
+function selectionFor(
+  element: HTMLElement | null,
+  elementType: SelectionInfo['elementType'],
+  range: Range | null = null,
+): SelectionInfo {
+  return {
+    text: 'old',
+    range,
+    element,
+    elementType,
+    position: { top: 0, left: 0 },
+  };
+}
+
+/**
+ * jsdom does not implement execCommand. Tests that need the native-setter path
+ * leave it returning false; tests for the undo-preserving path make it apply the
+ * edit itself, the way a real browser would.
+ */
+function stubExecCommand(behaviour: 'unsupported' | 'insert'): void {
+  document.execCommand = vi.fn(
+    (command: string, _ui?: boolean, value?: string) => {
+      if (behaviour === 'unsupported') return false;
+      if (command !== 'insertText') return false;
+
+      const field = document.activeElement as
+        HTMLInputElement | HTMLTextAreaElement | null;
+      if (!field || !('value' in field)) return false;
+
+      const start = field.selectionStart ?? 0;
+      const end = field.selectionEnd ?? 0;
+      field.value =
+        field.value.slice(0, start) + (value ?? '') + field.value.slice(end);
+      return true;
+    },
+  ) as typeof document.execCommand;
+}
+
+beforeEach(() => {
+  document.body.innerHTML = '';
+  Object.assign(navigator, {
+    clipboard: { writeText: vi.fn(() => Promise.resolve()) },
+  });
+});
+
+afterEach(() => {
+  document.body.innerHTML = '';
+});
+
+describe('replaceSelectedText in a textarea', () => {
+  it('replaces the selected range and reports it as replaced', async () => {
+    stubExecCommand('unsupported');
+    const textarea = document.createElement('textarea');
+    textarea.value = 'keep old keep';
+    document.body.appendChild(textarea);
+    textarea.setSelectionRange(5, 8);
+
+    const outcome = await replaceSelectedText(
+      selectionFor(textarea, 'textarea'),
+      'new',
+    );
+
+    expect(outcome).toBe('replaced');
+    expect(textarea.value).toBe('keep new keep');
+  });
+
+  it('leaves the caret after the inserted text', async () => {
+    stubExecCommand('unsupported');
+    const textarea = document.createElement('textarea');
+    textarea.value = 'ab';
+    document.body.appendChild(textarea);
+    textarea.setSelectionRange(0, 2);
+
+    await replaceSelectedText(selectionFor(textarea, 'textarea'), 'xyz');
+
+    expect(textarea.selectionStart).toBe(3);
+    expect(textarea.selectionEnd).toBe(3);
+  });
+
+  it('dispatches input and change so frameworks observe the edit', async () => {
+    stubExecCommand('unsupported');
+    const textarea = document.createElement('textarea');
+    textarea.value = 'old';
+    document.body.appendChild(textarea);
+    textarea.setSelectionRange(0, 3);
+
+    const events: string[] = [];
+    textarea.addEventListener('input', () => events.push('input'));
+    textarea.addEventListener('change', () => events.push('change'));
+
+    await replaceSelectedText(selectionFor(textarea, 'textarea'), 'new');
+
+    expect(events).toEqual(['input', 'change']);
+  });
+
+  /** This path was unreachable dead code, so textarea edits were not undoable. */
+  it('prefers execCommand so the browser undo stack is preserved', async () => {
+    stubExecCommand('insert');
+    const textarea = document.createElement('textarea');
+    textarea.value = 'old';
+    document.body.appendChild(textarea);
+    textarea.setSelectionRange(0, 3);
+
+    const outcome = await replaceSelectedText(
+      selectionFor(textarea, 'textarea'),
+      'new',
+    );
+
+    expect(outcome).toBe('replaced');
+    expect(document.execCommand).toHaveBeenCalledWith(
+      'insertText',
+      false,
+      'new',
+    );
+    expect(textarea.value).toBe('new');
+  });
+});
+
+/**
+ * The single most consequential regression. Every <input> replacement threw
+ * `Illegal invocation` — the descriptor was always resolved from
+ * HTMLTextAreaElement.prototype — and the catch reported success after falling
+ * back to a clipboard copy, so the card showed a green "Replaced".
+ */
+describe('replaceSelectedText in an input', () => {
+  // Only the types the HTML spec allows selection on; email and number are not
+  // among them and are filtered out upstream in selection.ts.
+  it.each(['text', 'search', 'url', 'tel', 'password'])(
+    'replaces the selection in an input[type=%s]',
+    async (type) => {
+      stubExecCommand('unsupported');
+      const input = document.createElement('input');
+      input.type = type;
+      input.value = 'keep old keep';
+      document.body.appendChild(input);
+      input.setSelectionRange(5, 8);
+
+      const outcome = await replaceSelectedText(
+        selectionFor(input, 'input'),
+        'new',
+      );
+
+      expect(outcome).toBe('replaced');
+      expect(input.value).toBe('keep new keep');
+    },
+  );
+
+  it('does not write to the clipboard when the replacement succeeds', async () => {
+    stubExecCommand('unsupported');
+    const input = document.createElement('input');
+    input.value = 'old';
+    document.body.appendChild(input);
+    input.setSelectionRange(0, 3);
+
+    await replaceSelectedText(selectionFor(input, 'input'), 'new');
+
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+  });
+});
+
+describe('replaceSelectedText in a contenteditable', () => {
+  function buildEditable(text: string): { host: HTMLElement; range: Range } {
+    const host = document.createElement('div');
+    host.setAttribute('contenteditable', 'true');
+    // jsdom does not derive isContentEditable from the attribute.
+    Object.defineProperty(host, 'isContentEditable', {
+      value: true,
+      configurable: true,
+    });
+    host.textContent = text;
+    document.body.appendChild(host);
+
+    const range = document.createRange();
+    range.selectNodeContents(host.firstChild!);
+    return { host, range };
+  }
+
+  it('inserts via execCommand when available', async () => {
+    document.execCommand = vi.fn(() => true) as typeof document.execCommand;
+    const { host, range } = buildEditable('old');
+
+    const outcome = await replaceSelectedText(
+      selectionFor(host, 'contenteditable', range),
+      'new',
+    );
+
+    expect(outcome).toBe('replaced');
+    expect(document.execCommand).toHaveBeenCalledWith(
+      'insertText',
+      false,
+      'new',
+    );
+  });
+
+  it('falls back to manual DOM insertion when execCommand is unavailable', async () => {
+    document.execCommand = vi.fn(() => false) as typeof document.execCommand;
+    const { host, range } = buildEditable('old');
+
+    const outcome = await replaceSelectedText(
+      selectionFor(host, 'contenteditable', range),
+      'new',
+    );
+
+    expect(outcome).toBe('replaced');
+    expect(host.textContent).toBe('new');
+  });
+
+  it('dispatches an InputEvent so React-backed editors resync', async () => {
+    document.execCommand = vi.fn(() => true) as typeof document.execCommand;
+    const { host, range } = buildEditable('old');
+
+    const inputEvents: InputEvent[] = [];
+    host.addEventListener('input', (event) =>
+      inputEvents.push(event as InputEvent),
+    );
+
+    await replaceSelectedText(
+      selectionFor(host, 'contenteditable', range),
+      'new',
+    );
+
+    expect(inputEvents).toHaveLength(1);
+    expect(inputEvents[0]!.inputType).toBe('insertText');
+  });
+
+  /**
+   * The range is captured when the card opens, so the host page may have
+   * re-rendered since. Mutating a detached subtree would report success for text
+   * the user never sees.
+   */
+  it('copies instead when the captured range has been detached', async () => {
+    document.execCommand = vi.fn(() => true) as typeof document.execCommand;
+    const { host, range } = buildEditable('old');
+    host.remove();
+
+    const outcome = await replaceSelectedText(
+      selectionFor(host, 'contenteditable', range),
+      'new',
+    );
+
+    expect(outcome).toBe('copied');
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('new');
+  });
+});
+
+describe('replaceSelectedText on a non-editable selection', () => {
+  it('copies to the clipboard and says so', async () => {
+    const outcome = await replaceSelectedText(
+      selectionFor(null, 'unknown'),
+      'new',
+    );
+
+    expect(outcome).toBe('copied');
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('new');
+  });
+
+  it('reports failure when even the clipboard is unavailable', async () => {
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn(() => Promise.reject(new Error('not focused'))),
+      },
+    });
+    document.execCommand = vi.fn(() => false) as typeof document.execCommand;
+
+    await expect(
+      replaceSelectedText(selectionFor(null, 'unknown'), 'new'),
+    ).resolves.toBe('failed');
+  });
+});
+
+describe('copyToClipboard', () => {
+  it('uses the async clipboard API when it works', async () => {
+    await expect(copyToClipboard('text')).resolves.toBe(true);
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('text');
+  });
+
+  it('falls back to a hidden textarea when the API rejects', async () => {
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn(() => Promise.reject(new Error('denied'))),
+      },
+    });
+    document.execCommand = vi.fn(() => true) as typeof document.execCommand;
+
+    await expect(copyToClipboard('text')).resolves.toBe(true);
+    expect(document.execCommand).toHaveBeenCalledWith('copy');
+  });
+
+  it('leaves no scratch element behind', async () => {
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn(() => Promise.reject(new Error('denied'))),
+      },
+    });
+    document.execCommand = vi.fn(() => true) as typeof document.execCommand;
+
+    await copyToClipboard('text');
+
+    expect(document.querySelectorAll('textarea')).toHaveLength(0);
+  });
+});
