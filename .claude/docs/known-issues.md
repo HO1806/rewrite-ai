@@ -6,11 +6,11 @@ Everything the cleanup pass deliberately left, with enough context to pick it up
 
 `store-assets/` holds nine generated PNGs and the prompts that produced them (`asset-prompts.txt`). **None of them meet Chrome Web Store dimension requirements:**
 
-| Actual         | Count | Requested in asset-prompts.txt |
-| -------------- | ----- | ------------------------------ |
-| 1586 × 992     | 7     | 1280 × 800                     |
-| 1573 × 1000    | 1     | 1280 × 800                     |
-| 1024 × 1024    | 1     | 512 × 512 icon                 |
+| Actual      | Count | Requested in asset-prompts.txt |
+| ----------- | ----- | ------------------------------ |
+| 1586 × 992  | 7     | 1280 × 800                     |
+| 1573 × 1000 | 1     | 1280 × 800                     |
+| 1024 × 1024 | 1     | 512 × 512 icon                 |
 
 The 440 × 280 small promo tile described in the prompts was never produced. They also predate the UI rewrite, so they no longer show the current interface. Regenerating them was out of scope for a code cleanup — it needs screenshots of the rebuilt UI, not image generation.
 

@@ -4,11 +4,11 @@ Three processes, one port protocol.
 
 ## Processes
 
-| Process             | Entry                    | Runs                                   | Holds the API key |
-| ------------------- | ------------------------ | -------------------------------------- | ----------------- |
-| Service worker      | `src/background/index.ts` | Event-driven, terminated when idle     | **Yes**           |
-| Content script      | `src/content/index.tsx`   | Every page and frame (`<all_urls>`)     | No                |
-| Popup / options     | `src/popup`, `src/options` | While open                             | Reads for editing |
+| Process         | Entry                      | Runs                                | Holds the API key |
+| --------------- | -------------------------- | ----------------------------------- | ----------------- |
+| Service worker  | `src/background/index.ts`  | Event-driven, terminated when idle  | **Yes**           |
+| Content script  | `src/content/index.tsx`    | Every page and frame (`<all_urls>`) | No                |
+| Popup / options | `src/popup`, `src/options` | While open                          | Reads for editing |
 
 The provider `fetch` happens **only** in the service worker. The content script never reads settings, so the key never enters a page's process — an isolated world still shares a process with the page.
 

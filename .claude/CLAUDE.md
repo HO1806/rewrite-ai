@@ -41,18 +41,18 @@ The **fetch happens in the service worker**, never the content script. That is w
 
 ## Layout
 
-| Path              | Holds                                                          |
-| ----------------- | -------------------------------------------------------------- |
-| `src/ai/`         | Providers, streaming, factory, safe JSON navigation            |
+| Path              | Holds                                                                           |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `src/ai/`         | Providers, streaming, factory, safe JSON navigation                             |
 | `src/background/` | Service worker: context menus, tab messaging, port handler, Zod message schemas |
-| `src/content/`    | Content script: selection, replacement, shadow host, the card   |
-| `src/popup/`      | Toolbar popup (three tabs)                                     |
-| `src/options/`    | Options page                                                   |
-| `src/prompts/`    | Prompt definitions and adjustment phrasing                     |
-| `src/shared/`     | Constants, types, theme resolution, error narrowing            |
-| `src/storage/`    | `chrome.storage` wrapper and the settings schema               |
-| `src/styles/`     | Design tokens and per-surface stylesheets                      |
-| `src/ui/`         | Components and hooks shared by popup and options               |
+| `src/content/`    | Content script: selection, replacement, shadow host, the card                   |
+| `src/popup/`      | Toolbar popup (three tabs)                                                      |
+| `src/options/`    | Options page                                                                    |
+| `src/prompts/`    | Prompt definitions and adjustment phrasing                                      |
+| `src/shared/`     | Constants, types, theme resolution, error narrowing                             |
+| `src/storage/`    | `chrome.storage` wrapper and the settings schema                                |
+| `src/styles/`     | Design tokens and per-surface stylesheets                                       |
+| `src/ui/`         | Components and hooks shared by popup and options                                |
 
 ## Conventions
 

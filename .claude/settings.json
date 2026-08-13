@@ -26,11 +26,7 @@
       "Bash(find:*)",
       "Bash(wc:*)"
     ],
-    "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Bash(git push --force:*)"
-    ]
+    "deny": ["Read(./.env)", "Read(./.env.*)", "Bash(git push --force:*)"]
   },
   "hooks": {
     "PostToolUse": [

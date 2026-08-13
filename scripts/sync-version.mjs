@@ -31,7 +31,9 @@ const expected = packageJson.version;
 const problems = [];
 
 if (manifest.version !== expected) {
-  problems.push(`manifest.json is ${manifest.version}, package.json is ${expected}`);
+  problems.push(
+    `manifest.json is ${manifest.version}, package.json is ${expected}`,
+  );
 }
 
 if (tag) {
@@ -56,5 +58,8 @@ if (manifest.version === expected) {
   process.exit(0);
 }
 
-writeFileSync(manifestPath, `${JSON.stringify({ ...manifest, version: expected }, null, 2)}\n`);
+writeFileSync(
+  manifestPath,
+  `${JSON.stringify({ ...manifest, version: expected }, null, 2)}\n`,
+);
 console.log(`manifest.json updated to ${expected}`);

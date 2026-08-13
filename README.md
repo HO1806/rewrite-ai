@@ -28,11 +28,11 @@ If the selection is somewhere the extension cannot write to — a read-only page
 
 The Adjust drawer re-runs the rewrite with extra instructions:
 
-| Category | Options                                                          |
-| -------- | ---------------------------------------------------------------- |
-| Tone     | Professional, Casual, Enthusiastic, Informal, Neutral, Funny      |
-| Format   | Paragraph, Email, Ideas (bulleted), Blog post                     |
-| Length   | Short, Medium, Long                                               |
+| Category | Options                                                      |
+| -------- | ------------------------------------------------------------ |
+| Tone     | Professional, Casual, Enthusiastic, Informal, Neutral, Funny |
+| Format   | Paragraph, Email, Ideas (bulleted), Blog post                |
+| Length   | Short, Medium, Long                                          |
 
 ### Popup
 
@@ -111,9 +111,9 @@ Open the options page by right-clicking the toolbar icon and choosing **Options*
 
 | Setting            | Description                                                                       |
 | ------------------ | --------------------------------------------------------------------------------- |
-| **AI provider**    | OpenAI, Groq, Google Gemini, Anthropic Claude, OpenRouter, Ollama, custom server   |
-| **API key**        | Stored in `chrome.storage.local` only — never `sync`, so it is not sent to Google  |
-| **Base URL**       | Only for Ollama and custom servers. Must be `https`, or `http` on localhost        |
+| **AI provider**    | OpenAI, Groq, Google Gemini, Anthropic Claude, OpenRouter, Ollama, custom server  |
+| **API key**        | Stored in `chrome.storage.local` only — never `sync`, so it is not sent to Google |
+| **Base URL**       | Only for Ollama and custom servers. Must be `https`, or `http` on localhost       |
 | **Model**          | Free text, with per-provider presets                                              |
 | **Creativity**     | Temperature, 0.0 – 2.0 (default 0.3)                                              |
 | **Response limit** | Max tokens, 1 – 128000 (default 2048)                                             |
