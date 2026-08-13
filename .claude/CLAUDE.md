@@ -86,6 +86,8 @@ The **fetch happens in the service worker**, never the content script. That is w
 11. **The shadow host needs an explicit `z-index`.** A positioned host with `z-index: auto` creates no stacking context, so the whole shadow subtree paints behind any page element with `z-index >= 1`. This is why the card was invisible on Gmail and Slack. Put it on the host, not the card — the card's own stacking context cannot escape the host's paint slot.
 12. **Injection completing is not readiness.** The bundler's content-script loader fires a dynamic `import()` and returns, so `executeScript` resolves while the module graph is still loading and `onMessage` is unregistered. Poll `PING` before delivering; never assume the script is listening.
 13. **Capture selection offsets up front.** Opening the card moves focus off the field, and a controlled input collapses its selection on blur — re-reading `selectionStart` at replace time appends instead of replacing.
+14. **The content script must not read settings.** It gets the theme by asking the worker for that one field — `GET_THEME`, handled in `src/background/themeBridge.ts`, called from `src/content/theme.ts`. The settings object carries the API key, and pulling it into a process shared with the page is what rule 8 exists to prevent. That rule was documented and then broken twice, which is why the mechanism now exists.
+15. **Each in-page surface gets its own shadow host.** `mountSurface`/`unmountSurface` in `src/content/mount.ts` keep the React root and its host node as a pair, per surface (`card`, `trigger`). The inline trigger has to outlive the absence of a card and disappear when one opens, so they cannot share a host — and each host needs its own `z-index`, per rule 11.
 
 ## Testing
 
