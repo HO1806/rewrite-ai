@@ -2,19 +2,27 @@
 
 Everything the cleanup pass deliberately left, with enough context to pick it up.
 
-## Store assets need regenerating
+## Store screenshots show a UI that no longer exists
 
-`store-assets/` holds nine generated PNGs and the prompts that produced them (`asset-prompts.txt`). **None of them meet Chrome Web Store dimension requirements:**
+Dimensions are fixed — `store-assets/upload/` now holds everything at the exact
+sizes the store requires, built by `scripts/build_store_assets.py`. What remains
+is a **content** problem: the screenshots were generated before the code was
+reworked and depict features that are gone.
 
-| Actual      | Count | Requested in asset-prompts.txt |
-| ----------- | ----- | ------------------------------ |
-| 1586 × 992  | 7     | 1280 × 800                     |
-| 1573 × 1000 | 1     | 1280 × 800                     |
-| 1024 × 1024 | 1     | 512 × 512 icon                 |
+- Tone pills read `Informational` / `Funny`; the code offers Professional, Casual,
+  Enthusiastic, Informal, Neutral, Funny.
+- Format pills read `Paragraph, Bullets, Email, Formal Letter, Summary, List`;
+  `FORMAT_OPTIONS` has four.
+- Groq presets read `mixtral-8x7b`, `gemma2-9b`, `qwen2.5-72b`; `PROVIDERS` lists
+  two. The popup also shows a `v1.2.0` badge and a "Rate us" link that do not exist.
 
-The 440 × 280 small promo tile described in the prompts was never produced. They also predate the UI rewrite, so they no longer show the current interface. Regenerating them was out of scope for a code cleanup — it needs screenshots of the rebuilt UI, not image generation.
+Web Store review requires screenshots to represent the extension accurately, so
+this is a rejection risk on its own. The fix is real captures of the built
+extension at 1280×800 — see `/build-extension` — dropped into `store-assets/source/`
+and re-run through the script. Not doable from here: it needs a browser.
 
-`icons/*.png` are fine: real 16/48/128 images at the correct sizes.
+The 1400×560 marquee tile is also unbuilt. It is optional, and no source is close
+to 2.5∶1, so it wants purpose-built artwork rather than a 37% vertical crop.
 
 ## No release has been published
 

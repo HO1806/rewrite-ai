@@ -39,6 +39,11 @@ coverage/
 .claude/.scratch/
 .playwright-mcp/
 
-# Store listing images: large, and regenerated rather than edited.
-# See store-assets/README.md. They stay on disk, out of git history.
-store-assets/*.png
+# Oversized store-listing originals (~12.6 MB, none at a usable size). The
+# upload-ready assets built from them ARE tracked — see store-assets/README.md.
+store-assets/source/*.png
+.playwright-output/
+
+# Python bytecode from scripts/
+__pycache__/
+*.pyc
