@@ -20,8 +20,12 @@ import {
 } from '@/ai/types';
 import { buildProviderConfig, createProvider } from '@/ai/factory';
 import { getPromptForAction } from '@/prompts';
-import { loadSettings } from '@/storage/settings';
-import { REQUEST_TIMEOUT_MS, STREAM_PORT_NAME } from '@/shared/constants';
+import { Settings, loadSettings } from '@/storage/settings';
+import {
+  REQUEST_TIMEOUT_MS,
+  REQUEST_TIMEOUT_NO_STREAM_MS,
+  STREAM_PORT_NAME,
+} from '@/shared/constants';
 import type { StreamMessage } from '@/shared/types';
 import { getErrorMessage } from '@/shared/errors';
 import { describeValidationError, streamRequestSchema } from './messages';
@@ -68,13 +72,19 @@ class StreamSession {
 
     const controller = new AbortController();
     this.controller = controller;
-    this.timeoutHandle = setTimeout(
-      () => controller.abort(ABORT_TIMEOUT),
-      REQUEST_TIMEOUT_MS,
-    );
 
     try {
-      await this.run(parsed.data, controller.signal);
+      const settings = await loadSettings();
+
+      // A non-streamed request produces no port traffic, so nothing resets the
+      // worker's idle timer and a 90s timeout could never fire — the worker
+      // would be evicted first and the client would only see the port close.
+      this.timeoutHandle = setTimeout(
+        () => controller.abort(ABORT_TIMEOUT),
+        settings.stream ? REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_NO_STREAM_MS,
+      );
+
+      await this.run(parsed.data, controller.signal, settings);
     } catch (err: unknown) {
       const message = toUserMessage(err);
       if (message) this.post({ type: 'ERROR', message });
@@ -89,8 +99,8 @@ class StreamSession {
   private async run(
     request: ReturnType<typeof streamRequestSchema.parse>,
     signal: AbortSignal,
+    settings: Settings,
   ): Promise<void> {
-    const settings = await loadSettings();
     const provider = createProvider(buildProviderConfig(settings));
 
     const systemPrompt = getPromptForAction(request.action, {

@@ -24,7 +24,8 @@
     "test:coverage": "vitest run --coverage",
     "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
     "sync-version": "node scripts/sync-version.mjs",
-    "check-version": "node scripts/sync-version.mjs --check"
+    "check-version": "node scripts/sync-version.mjs --check",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -34,6 +35,7 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "2.7.1",
     "@eslint/js": "^9.15.0",
+    "@playwright/test": "^1.62.1",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",

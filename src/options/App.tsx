@@ -5,7 +5,7 @@ import { useAppliedTheme } from '@/ui/hooks/useAppliedTheme';
 import { useSettings } from '@/ui/hooks/useSettings';
 
 export function App() {
-  const { settings, isLoaded, saveState, setLocal, update } = useSettings();
+  const { settings, isLoaded, saveState, setLocal, flush } = useSettings();
 
   useAppliedTheme(settings.theme);
 
@@ -39,7 +39,7 @@ export function App() {
         className="panel tabpanel"
         onSubmit={(event) => {
           event.preventDefault();
-          void update({});
+          void flush();
         }}
       >
         <ProviderSettingsForm settings={settings} onChange={setLocal} />

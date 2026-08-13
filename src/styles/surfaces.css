@@ -370,6 +370,18 @@ body {
   color: var(--text-secondary);
 }
 
+/*
+ * Inline row. Previously ShortcutRow reused `.card__actions-group`, which lives
+ * only in card.css and so reaches the DOM only inside the content script's
+ * shadow root — the row silently fell back to `display: block` on both the
+ * popup and the options page.
+ */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .kbd {
   padding: 2px var(--space-2);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

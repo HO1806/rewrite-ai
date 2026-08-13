@@ -13,6 +13,13 @@
 
 :root,
 :host {
+  /*
+   * Tells the browser to render its own widgets to match. Without it the
+   * scrollbars, number spinners, select popups and password-reveal affordance
+   * stay light against the dark palette.
+   */
+  color-scheme: dark;
+
   /* ── Neutrals: the card's Fluent-derived ramp, kept as the shared base ── */
   --surface-base: oklch(23% 0 0);
   --surface-raised: oklch(28% 0 0);
@@ -92,6 +99,8 @@
 :root[data-theme='light'],
 :host([data-theme='light']),
 [data-theme='light'] {
+  color-scheme: light;
+
   --surface-base: oklch(100% 0 0);
   --surface-raised: oklch(98% 0.003 250);
   --surface-sunken: oklch(96% 0.005 250);

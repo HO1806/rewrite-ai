@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The floating card was invisible on most real sites.** Nothing in the codebase
+  set a `z-index`, so the shadow host — positioned with `z-index: auto` — created
+  no stacking context and its whole subtree painted behind every page element
+  with `z-index >= 1`. On Gmail, Slack, Notion or anything with a sticky header
+  the card mounted, streamed and billed without ever being seen.
+- **The first right-click on a tab that predated the extension was dropped.** The
+  worker injected the content script and resent immediately, but injection only
+  runs a loader that fires a dynamic `import()` and returns — so the resend raced
+  a 225 KB module graph and lost. The worker now polls a `PING` until the script
+  answers before delivering.
+- **Seven "Cannot find menu item" errors and no context menu at all.** Two
+  overlapping menu rebuilds interleaved, the second `removeAll()` deleting the
+  parent between the first's parent-create and its children. Rebuilds are now
+  serialized, and a failed parent is reported once instead of cascading.
+- Context-menu requests were broadcast to every frame in the tab, so a page with
+  ad iframes opened one card and billed one request **per frame**. The clicked
+  frame is now targeted directly.
+- Replacing text appended the rewrite instead of substituting it, while still
+  reporting "Replaced". Selection offsets are captured up front rather than
+  re-read after the card has taken focus and a controlled field has collapsed
+  the selection.
+- The card was positioned using its worst-case drawer-open height as if that
+  were its actual height, placing it up to 90px above the text it was rewriting
+  and, on short viewports, at a fixed offset that ignored the selection. It now
+  uses its measured height and repositions when the drawer changes it.
+- The card could not be dismissed by clicking away on Gmail, Slack or Notion,
+  which stop `mousedown` propagation; the listener now uses the capture phase.
+- Native widgets — scrollbars, number spinners, select popups — rendered light
+  against the dark palette. Added `color-scheme`.
+- The shortcut row lost its layout on the popup and options page: it used a class
+  defined only in the content script's shadow stylesheet.
+- Every keystroke in the popup wrote to `chrome.storage`, and the async change
+  echo could overwrite newer keystrokes, dropping characters. Writes are now
+  debounced and the extension ignores the echo of its own write.
+- Switching popup tabs silently cancelled an in-flight generation and discarded
+  the result; panels now stay mounted.
+- With streaming disabled the 90s request timeout could never fire, because
+  nothing reset the service worker's idle timer and the worker was evicted first.
+  The non-streaming ceiling is now below that budget.
+- Removed `optional_host_permissions`, which requested `https://*/*` and was
+  never used.
+
 - Replacing text in an `<input>` always failed and silently fell back to a
   clipboard copy while reporting "Replaced". The native value setter was
   resolved from the wrong prototype.
@@ -97,7 +139,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- 358 tests, up from 12, with 80% coverage thresholds enforced by the test run.
+- A Playwright smoke test (`pnpm test:e2e`) that loads the built extension in
+  Chromium and drives it: asserts the card is visible **and hit-testable above a
+  `z-index: 9999` page overlay**, that a rewrite streams end to end through a
+  stubbed provider, that replacement substitutes rather than appends in both a
+  textarea and an input, and that both extension pages render with styles. Every
+  bug above passed the unit suite, because jsdom performs no layout or paint.
+- 366 tests, up from 12, with 80% coverage thresholds enforced by the test run.
 - A Chrome API test double covering `tabs`, `scripting`, `commands` and ports.
 - `pnpm verify` to run the whole gate.
 - Version consistency check between the git tag, `package.json` and

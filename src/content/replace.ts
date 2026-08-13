@@ -29,6 +29,7 @@ export async function replaceSelectedText(
         replaceInFormField(
           element as HTMLInputElement | HTMLTextAreaElement,
           newText,
+          selectionInfo,
         )
       ) {
         return 'replaced';
@@ -65,9 +66,22 @@ export async function replaceSelectedText(
 function replaceInFormField(
   field: HTMLInputElement | HTMLTextAreaElement,
   newText: string,
+  selectionInfo: SelectionInfo,
 ): boolean {
-  const start = field.selectionStart ?? 0;
-  const end = field.selectionEnd ?? 0;
+  /**
+   * Use the offsets captured when the selection was made, not the field's
+   * current ones. Opening the card moves focus away, and a framework-controlled
+   * field reacts to the blur by reassigning `value`, which collapses the
+   * selection to the end — re-reading here appended the rewrite to the user's
+   * original text while still reporting a successful replacement.
+   */
+  const start = selectionInfo.selectionStart ?? field.selectionStart ?? 0;
+  const end = selectionInfo.selectionEnd ?? field.selectionEnd ?? 0;
+
+  // The field may have changed under us; a stale range would corrupt the value.
+  if (start > field.value.length || end > field.value.length || start > end) {
+    return false;
+  }
 
   field.focus();
 

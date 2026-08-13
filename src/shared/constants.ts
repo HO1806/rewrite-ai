@@ -37,8 +37,23 @@ export const STORAGE_KEYS = {
  */
 export const MAX_INPUT_LENGTH = 20_000;
 
-/** How long a single generation may run before it is aborted. */
+/**
+ * How long a streamed generation may run before it is aborted.
+ *
+ * Safe to exceed the service worker's idle timeout because each relayed chunk is
+ * extension-API activity, which resets it.
+ */
 export const REQUEST_TIMEOUT_MS = 90_000;
+
+/**
+ * The same ceiling when streaming is off.
+ *
+ * With no streaming there is a single `await fetch` and no API activity in
+ * between, so nothing resets the worker's ~30s idle timer — a longer timeout can
+ * never fire, because the worker is evicted first and the client just sees the
+ * port close. Kept under that budget so the timeout is the thing that wins.
+ */
+export const REQUEST_TIMEOUT_NO_STREAM_MS = 25_000;
 
 /* ── Floating card geometry ── */
 
@@ -50,7 +65,13 @@ export const REQUEST_TIMEOUT_MS = 90_000;
  */
 export const CARD = {
   width: 460,
-  /** Worst-case height, with the adjust drawer open. Used for edge clamping. */
+  /**
+   * Estimated height with the adjust drawer closed, used to place the card
+   * before it has been measured. Treating the worst-case height as the actual
+   * height put the card above the text it was rewriting.
+   */
+  height: 220,
+  /** Worst-case height, with the adjust drawer open. */
   maxHeight: 480,
   /** Gap between the selection and the card. */
   offset: 8,

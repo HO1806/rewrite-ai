@@ -73,6 +73,45 @@ describe('rebuildContextMenus', () => {
     expect(chromeMock.createdMenus).toHaveLength(ACTIONS.length + 1);
   });
 
+  /**
+   * The failure that put a red "Errors" badge on the extension card. Two
+   * overlapping rebuilds used to interleave: the second `removeAll()` deleted the
+   * parent between the first rebuild's parent-create and its children, so all
+   * seven children failed with "Cannot find menu item" and no menu was left.
+   * Reachable when onInstalled and onStartup both fire, or when the user hits
+   * Reload while a rebuild is in flight.
+   */
+  it('serializes concurrent rebuilds instead of interleaving them', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await Promise.all([
+      rebuildContextMenus(),
+      rebuildContextMenus(),
+      rebuildContextMenus(),
+    ]);
+
+    expect(warn).not.toHaveBeenCalled();
+    // Exactly one complete menu survives, not three partial ones.
+    expect(chromeMock.createdMenus).toHaveLength(ACTIONS.length + 1);
+    expect(chromeMock.createdMenus[0]).toMatchObject({
+      id: 'rewrite-ai-parent',
+    });
+  });
+
+  /** Without the parent, seven "Cannot find menu item" errors used to follow. */
+  it('reports once and stops when the parent cannot be created', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    chromeMock.lastError = { message: 'duplicate id' };
+
+    await rebuildContextMenus();
+
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error.mock.calls[0]?.[0]).toMatch(/Reload the extension/);
+    // No children were attempted.
+    expect(chromeMock.createdMenus).toHaveLength(1);
+  });
+
   /** lastError was checked nowhere in the codebase, hiding exactly this. */
   it('logs a warning when a menu cannot be created', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

@@ -39,4 +39,17 @@ export default tseslint.config(
       '@typescript-eslint/no-non-null-assertion': 'off',
     },
   },
+  {
+    /**
+     * Playwright fixtures take a callback named `use` and destructure `{}` when a
+     * fixture needs no dependencies. The react-hooks rule reads `use` as React's
+     * hook of the same name, and neither convention is negotiable, so both rules
+     * are off for the e2e suite only.
+     */
+    files: ['tests/e2e/**/*.ts'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+      'no-empty-pattern': 'off',
+    },
+  },
 );

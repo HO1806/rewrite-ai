@@ -56,7 +56,7 @@ export function RewriteCard({
   const titleId = useId();
 
   const { text, isGenerating, error, start } = useStreamingRewrite();
-  const position = useAnchoredPosition(selectionInfo);
+  const position = useAnchoredPosition(selectionInfo, cardRef);
 
   // Kick off the initial rewrite. `start` is stable, so this runs once.
   useEffect(() => {

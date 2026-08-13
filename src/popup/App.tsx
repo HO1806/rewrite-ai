@@ -29,7 +29,7 @@ export function App() {
       render: () => (
         <SettingsTab
           settings={settings}
-          onChange={(partial) => void update(partial)}
+          onChange={update}
           onOpenOptions={openOptions}
         />
       ),

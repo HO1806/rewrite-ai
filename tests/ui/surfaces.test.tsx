@@ -93,8 +93,9 @@ describe('popup', () => {
 
     await userEvent.click(await screen.findByRole('tab', { name: /Info/ }));
 
-    expect(screen.getByText('Groq (ultra fast)')).toBeInTheDocument();
-    expect(screen.getByText('Configured')).toBeInTheDocument();
+    const panel = within(screen.getByRole('tabpanel'));
+    expect(panel.getByText('Groq (ultra fast)')).toBeInTheDocument();
+    expect(panel.getByText('Configured')).toBeInTheDocument();
   });
 
   it('reports a missing key in the info tab', async () => {
@@ -102,14 +103,20 @@ describe('popup', () => {
     render(<PopupApp />);
 
     await userEvent.click(await screen.findByRole('tab', { name: /Info/ }));
-    expect(screen.getByText('Not set')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('tabpanel')).getByText('Not set'),
+    ).toBeInTheDocument();
   });
 
   it('reads the real keyboard shortcut from the browser', async () => {
     await seed();
     render(<PopupApp />);
 
-    await waitFor(() => expect(screen.getByText('Alt+H')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('tabpanel')).getByText('Alt+H'),
+      ).toBeInTheDocument(),
+    );
   });
 
   it('reports a cleared shortcut rather than showing a stale default', async () => {
@@ -121,7 +128,9 @@ describe('popup', () => {
 
     render(<PopupApp />);
     await waitFor(() =>
-      expect(screen.getByText('Not set')).toBeInTheDocument(),
+      expect(
+        within(screen.getByRole('tabpanel')).getByText('Not set'),
+      ).toBeInTheDocument(),
     );
   });
 

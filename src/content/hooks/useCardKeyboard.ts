@@ -68,7 +68,14 @@ export function useDismissOnOutsidePointer(
       dismissRef.current();
     };
 
-    window.addEventListener('mousedown', handlePointerDown);
-    return () => window.removeEventListener('mousedown', handlePointerDown);
+    // Capture phase, for the same reason the keydown listener above uses it:
+    // Gmail, Slack and Notion all stopPropagation on mousedown to run their own
+    // outside-click logic, so a bubble-phase listener on window never fires and
+    // the card becomes impossible to dismiss by clicking away.
+    window.addEventListener('mousedown', handlePointerDown, { capture: true });
+    return () =>
+      window.removeEventListener('mousedown', handlePointerDown, {
+        capture: true,
+      });
   }, [cardRef]);
 }

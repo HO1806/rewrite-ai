@@ -34,11 +34,21 @@ export interface ChromeMock {
   };
   createdMenus: chrome.contextMenus.CreateProperties[];
   executedScripts: chrome.scripting.ScriptInjection<[], unknown>[];
-  sentTabMessages: Array<{ tabId: number; message: unknown }>;
+  sentTabMessages: Array<{ tabId: number; message: unknown; frameId?: number }>;
+  /** Count of every sendMessage call, including rejected ones. */
+  tabMessageAttempts: number;
   /** Set to make chrome.tabs.sendMessage reject, simulating a missing content script. */
   tabMessageError: string | null;
   /** Set to make chrome.scripting.executeScript reject. */
   executeScriptError: string | null;
+  /**
+   * Models the real content-script loader: injection resolves immediately while
+   * the module graph is still loading, so the script only starts answering after
+   * this many `sendMessage` attempts. The previous mock cleared `tabMessageError`
+   * by hand one microtask after injection, which made a broken recovery path look
+   * healthy — the resend in `tabs.ts` never actually won that race in a browser.
+   */
+  attemptsUntilContentScriptReady: number | null;
   manifest: chrome.runtime.Manifest;
   lastError: { message: string } | undefined;
 }
@@ -134,14 +144,19 @@ export function installChromeMock(): ChromeMock {
     createdMenus: [],
     executedScripts: [],
     sentTabMessages: [],
+    tabMessageAttempts: 0,
     tabMessageError: null,
     executeScriptError: null,
+    attemptsUntilContentScriptReady: null,
     manifest: {
       manifest_version: 3,
       name: 'Rewrite AI',
       version: '1.0.0',
       content_scripts: [
-        { matches: ['<all_urls>'], js: ['src/content/index.tsx'] },
+        // The built manifest carries the bundler's loader chunk, not the source
+        // path — `tabs.ts` injects whatever this reports, so the mock must not
+        // claim a path that never exists at runtime.
+        { matches: ['<all_urls>'], js: ['assets/index.tsx-loader-abc123.js'] },
       ],
     } as chrome.runtime.Manifest,
     lastError: undefined,
@@ -188,12 +203,30 @@ export function installChromeMock(): ChromeMock {
 
     tabs: {
       create: vi.fn(() => Promise.resolve({})),
-      sendMessage: vi.fn((tabId: number, message: unknown) => {
-        if (state.tabMessageError)
-          return Promise.reject(new Error(state.tabMessageError));
-        state.sentTabMessages.push({ tabId, message });
-        return Promise.resolve();
-      }),
+      sendMessage: vi.fn(
+        (tabId: number, message: unknown, options?: { frameId?: number }) => {
+          state.tabMessageAttempts += 1;
+
+          // Simulate the loader still resolving its dynamic import: injection
+          // has returned but the listener is not registered yet.
+          if (
+            state.attemptsUntilContentScriptReady !== null &&
+            state.tabMessageAttempts <= state.attemptsUntilContentScriptReady
+          ) {
+            return Promise.reject(new Error('Could not establish connection.'));
+          }
+
+          if (state.tabMessageError)
+            return Promise.reject(new Error(state.tabMessageError));
+
+          state.sentTabMessages.push({
+            tabId,
+            message,
+            frameId: options?.frameId,
+          });
+          return Promise.resolve();
+        },
+      ),
     },
 
     scripting: {

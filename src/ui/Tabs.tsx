@@ -70,13 +70,24 @@ export function Tabs<T extends string>({
         })}
       </div>
 
-      <div
-        id={`panel-${activeTab.id}`}
-        role="tabpanel"
-        aria-labelledby={`tab-${activeTab.id}`}
-      >
-        {activeTab.render()}
-      </div>
+      {/*
+        Every panel stays mounted and inactive ones are hidden. Rendering only
+        the active panel unmounted the Playground mid-generation, which
+        disconnected its port; the worker treats that as a deliberate cancel and
+        stays silent, so switching tabs and back showed an empty box with the
+        work already thrown away and nothing explaining why.
+      */}
+      {tabs.map((tab) => (
+        <div
+          key={tab.id}
+          id={`panel-${tab.id}`}
+          role="tabpanel"
+          aria-labelledby={`tab-${tab.id}`}
+          hidden={tab.id !== activeId}
+        >
+          {tab.render()}
+        </div>
+      ))}
     </>
   );
 }

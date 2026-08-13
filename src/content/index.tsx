@@ -24,6 +24,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   // leaves the sender's promise permanently unsettled.
   if (!parsed.success) return undefined;
 
+  // Readiness probe from the worker after it injects this script. Answer before
+  // doing anything else so the reply is as cheap and early as possible.
+  if (parsed.data.type === 'PING') {
+    sendResponse({ status: 'ready' });
+    return false;
+  }
+
   try {
     const { type, action } = parsed.data;
     openCard(action, type === 'REWRITE_REQUEST' ? parsed.data.text : undefined);
@@ -85,5 +92,7 @@ function buildSelectionInfo(contextMenuText?: string): SelectionInfo | null {
       top: CARD.margin * 4,
       left: Math.max(CARD.margin, (window.innerWidth - CARD.width) / 2),
     },
+    selectionStart: null,
+    selectionEnd: null,
   };
 }

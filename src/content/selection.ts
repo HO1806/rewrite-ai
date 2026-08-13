@@ -49,6 +49,8 @@ function readFormFieldSelection(): SelectionInfo | null {
     element: field,
     elementType: isTextArea ? 'textarea' : 'input',
     position: positionBelow(field.getBoundingClientRect()),
+    selectionStart: start,
+    selectionEnd: end,
   };
 }
 
@@ -78,6 +80,8 @@ function readWindowSelection(): SelectionInfo | null {
     element,
     elementType: isContentEditable ? 'contenteditable' : 'unknown',
     position: positionBelow(range.getBoundingClientRect()),
+    selectionStart: null,
+    selectionEnd: null,
   };
 }
 
@@ -86,18 +90,39 @@ function readWindowSelection(): SelectionInfo | null {
  *
  * Flips above the anchor when there is not enough room below, so the action
  * buttons cannot end up under the fold where nothing can scroll them into view.
+ *
+ * `height` is the card's real height. Passing the worst-case drawer-open height
+ * as if it were the actual height put the card up to 90px *above* the text it was
+ * rewriting, covering it — and on a short viewport clamped every position to the
+ * same constant, ignoring the selection entirely. Callers that have measured the
+ * rendered card pass its height; the default is the closed-card estimate.
  */
-export function positionBelow(rect: DOMRect): CardPosition {
-  const { width, maxHeight, offset, margin } = CARD;
+export function positionBelow(
+  rect: DOMRect,
+  height: number = CARD.height,
+): CardPosition {
+  const { width, offset, margin } = CARD;
 
-  const spaceBelow = window.innerHeight - rect.bottom - offset;
-  const top =
-    spaceBelow >= maxHeight || rect.top < maxHeight
-      ? Math.min(rect.bottom + offset, window.innerHeight - maxHeight - margin)
-      : rect.top - maxHeight - offset;
+  // Never claim more room than the viewport has.
+  const cardHeight = Math.min(height, window.innerHeight - 2 * margin);
+
+  const fitsBelow =
+    rect.bottom + offset + cardHeight <= window.innerHeight - margin;
+  const fitsAbove = rect.top - offset - cardHeight >= margin;
+
+  const top = fitsBelow
+    ? rect.bottom + offset
+    : fitsAbove
+      ? rect.top - offset - cardHeight
+      : // Neither side fits: sit as low as possible without overflowing.
+        window.innerHeight - cardHeight - margin;
 
   return {
-    top: Math.max(margin, top),
+    top: clamp(
+      top,
+      margin,
+      Math.max(margin, window.innerHeight - cardHeight - margin),
+    ),
     left: clamp(rect.left, margin, window.innerWidth - width - margin),
   };
 }

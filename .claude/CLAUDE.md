@@ -17,9 +17,15 @@ pnpm format / format:check
 pnpm check-version   # tag vs package.json vs manifest.json
 ```
 
+```bash
+pnpm test:e2e        # load dist/ in Chromium and drive it — needs a build first
+```
+
 Node >= 20, pnpm >= 9 (the lockfile is v9; **pnpm 8 cannot read it**).
 
-Loading the built extension: `chrome://extensions` → Developer mode → Load unpacked → `dist/`.
+Loading the built extension: `chrome://extensions` → Developer mode → Load unpacked → **`dist/`**. Never the project root: the root `manifest.json` is the build input and points at `.ts` sources, so Chrome accepts it and then fails to register the worker.
+
+**Unit tests cannot see this class of bug.** jsdom does no layout and no paint. A missing `z-index` that put the card behind every page overlay, and a content script that was not listening when the worker messaged it, both passed 366 unit tests while the extension did not work at all. Anything about stacking, visibility, hit-testing, focus, or injection timing belongs in `tests/e2e/`.
 
 ## How a rewrite flows
 
@@ -73,7 +79,10 @@ The **fetch happens in the service worker**, never the content script. That is w
 7. **Providers report errors inside HTTP 200 streams.** Give every parser an `extractError`, or output truncates silently.
 8. **The API key belongs in the worker.** Do not import `loadSettings` into anything under `src/content/`.
 9. **Selection APIs throw on `input[type=email|number]`.** Only text, search, url, tel and password support them.
-10. **Register card key handlers in the capture phase and stop propagation.** Otherwise `Ctrl+Enter` also fires the host page's binding, which in Gmail and Slack sends the message.
+10. **Register card key handlers — and the outside-click handler — in the capture phase, and stop propagation.** Otherwise `Ctrl+Enter` also fires the host page's binding, which in Gmail and Slack sends the message; and a bubble-phase `mousedown` never arrives at all on pages that stop propagation, leaving the card impossible to dismiss.
+11. **The shadow host needs an explicit `z-index`.** A positioned host with `z-index: auto` creates no stacking context, so the whole shadow subtree paints behind any page element with `z-index >= 1`. This is why the card was invisible on Gmail and Slack. Put it on the host, not the card — the card's own stacking context cannot escape the host's paint slot.
+12. **Injection completing is not readiness.** The bundler's content-script loader fires a dynamic `import()` and returns, so `executeScript` resolves while the module graph is still loading and `onMessage` is unregistered. Poll `PING` before delivering; never assume the script is listening.
+13. **Capture selection offsets up front.** Opening the card moves focus off the field, and a controlled input collapses its selection on blur — re-reading `selectionStart` at replace time appends instead of replacing.
 
 ## Testing
 

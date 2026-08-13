@@ -2,11 +2,26 @@
  * Messaging into tabs, with content-script recovery.
  *
  * A tab that was already open when the extension was installed or reloaded has
- * no content script, so the first message fails. The previous recovery attempt
- * hardcoded a Vite content-hash (`assets/index.tsx-loader-CTsBxEuS.js`) which no
- * longer matched what the build emitted — and since the hash is derived from file
- * content, no committed literal ever could. It also never resent the message
- * afterwards, and swallowed the failure at three separate levels.
+ * no content script, so the first message fails and one has to be injected.
+ *
+ * The subtle part is that **injection completing does not mean the script is
+ * listening.** The bundler emits a tiny loader that fires off a dynamic
+ * `import()` of the real module and returns immediately:
+ *
+ *     (function () {
+ *       (async () => {
+ *         const { onExecute } = await import(chrome.runtime.getURL("assets/…js"));
+ *         onExecute?.({ … });
+ *       })().catch(console.error);
+ *     })();
+ *
+ * `chrome.scripting.executeScript` resolves when that IIFE returns — microseconds
+ * later, while a ~225 KB module graph is still loading. `onMessage` is registered
+ * at the top level of the imported chunk, so sending the real message straight
+ * afterwards loses the race essentially every time and the user's click is
+ * silently dropped. So we poll a cheap PING until the script answers, and only
+ * then deliver. Polling PING rather than retrying the real message matters: a
+ * retried rewrite could land twice and mount duplicate cards.
  */
 
 import type { BackgroundToContentMessage } from '@/shared/types';
@@ -20,20 +35,45 @@ export type DeliveryResult =
       detail: string;
     };
 
+export interface SendOptions {
+  /**
+   * Deliver to one frame only. The context menu reports which frame the
+   * selection is in; without it every frame in the tab receives the message,
+   * and each one that cannot find a selection opens its own card and bills its
+   * own request.
+   */
+  frameId?: number;
+}
+
+/** Readiness polling: ~1.5s total, backing off so a fast script costs one probe. */
+const PING_DELAYS_MS = [0, 25, 50, 100, 150, 250, 400, 500];
+
 export async function sendMessageToTab(
   tabId: number,
   message: BackgroundToContentMessage,
+  options: SendOptions = {},
 ): Promise<DeliveryResult> {
+  const target =
+    options.frameId === undefined ? undefined : { frameId: options.frameId };
+
   try {
-    await chrome.tabs.sendMessage(tabId, message);
+    await dispatch(tabId, message, target);
     return { ok: true };
   } catch (err: unknown) {
     const injected = await injectContentScript(tabId);
     if (!injected.ok) return injected;
 
-    // Inject-then-resend: without this the user's click is simply dropped.
+    const ready = await waitForContentScript(tabId, target);
+    if (!ready) {
+      return {
+        ok: false,
+        reason: 'unknown',
+        detail: `${getErrorMessage(err)} / content script did not respond after injection`,
+      };
+    }
+
     try {
-      await chrome.tabs.sendMessage(tabId, message);
+      await dispatch(tabId, message, target);
       return { ok: true };
     } catch (resendErr: unknown) {
       return {
@@ -43,6 +83,37 @@ export async function sendMessageToTab(
       };
     }
   }
+}
+
+function dispatch(
+  tabId: number,
+  message: BackgroundToContentMessage,
+  target: { frameId: number } | undefined,
+): Promise<unknown> {
+  return target
+    ? chrome.tabs.sendMessage(tabId, message, target)
+    : chrome.tabs.sendMessage(tabId, message);
+}
+
+/** Poll PING until the freshly injected script answers, or give up. */
+async function waitForContentScript(
+  tabId: number,
+  target: { frameId: number } | undefined,
+): Promise<boolean> {
+  for (const delay of PING_DELAYS_MS) {
+    if (delay > 0) await sleep(delay);
+    try {
+      await dispatch(tabId, { type: 'PING' }, target);
+      return true;
+    } catch {
+      // Not listening yet; keep waiting.
+    }
+  }
+  return false;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

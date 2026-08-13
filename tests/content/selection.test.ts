@@ -210,7 +210,42 @@ describe('positionBelow', () => {
     setViewport(1280, 700);
     const position = positionBelow(rect({ top: 300, bottom: 340, left: 100 }));
 
-    expect(position.top + CARD.maxHeight).toBeLessThanOrEqual(700);
+    expect(position.top + CARD.height).toBeLessThanOrEqual(700);
+  });
+
+  /**
+   * The card's real height is what matters. Treating the worst-case drawer-open
+   * height as the actual height placed the card up to 90px *above* the text it
+   * was rewriting, covering it.
+   */
+  it('sits directly below the anchor rather than above it, for a closed card', () => {
+    setViewport(1280, 800);
+    const position = positionBelow(rect({ top: 300, bottom: 400, left: 100 }));
+
+    expect(position.top).toBe(400 + CARD.offset);
+  });
+
+  it('respects a measured height when one is given', () => {
+    setViewport(1280, 800);
+    // A tall card that no longer fits below has to flip above the anchor.
+    const position = positionBelow(
+      rect({ top: 500, bottom: 540, left: 100 }),
+      400,
+    );
+
+    expect(position.top).toBe(500 - CARD.offset - 400);
+    expect(position.top + 400).toBeLessThanOrEqual(800);
+  });
+
+  it('never overflows when the card is taller than the viewport', () => {
+    setViewport(1280, 300);
+    const position = positionBelow(
+      rect({ top: 100, bottom: 140, left: 100 }),
+      600,
+    );
+
+    expect(position.top).toBeGreaterThanOrEqual(CARD.margin);
+    expect(position.top).toBeLessThanOrEqual(300);
   });
 
   it('clamps the left edge so the card cannot overhang the right side', () => {

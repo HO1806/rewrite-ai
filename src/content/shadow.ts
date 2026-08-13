@@ -30,8 +30,24 @@ export function createShadowContainer(): ShadowContainer {
 
   const host = document.createElement('div');
   host.id = SHADOW_HOST_ID;
-  // The host itself occupies no space; the card inside is position: fixed.
-  host.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;';
+  /**
+   * The host occupies no space; the card inside is position: fixed.
+   *
+   * The `z-index` is load-bearing and must be on the **host**, not the card.
+   * Without it the host is positioned with `z-index: auto`, so it creates no
+   * stacking context and its whole shadow subtree paints in the same layer as
+   * ordinary positioned content — behind every page element with `z-index >= 1`.
+   * The card's own `position: fixed` stacking context orders only its children
+   * and cannot lift the subtree out of the host's paint slot. Dropping this line
+   * made the card invisible on Gmail, Slack, Notion and anything with a sticky
+   * header, while everything else about it worked.
+   *
+   * `z-index` is safe here where `transform`/`filter`/`will-change` would not be:
+   * it does not create a containing block, so the fixed card keeps resolving
+   * against the viewport, which is what `positionBelow` assumes.
+   */
+  host.style.cssText =
+    'position:absolute;top:0;left:0;width:0;height:0;z-index:2147483647;';
 
   document.body.appendChild(host);
 

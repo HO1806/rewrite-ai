@@ -92,16 +92,21 @@ pnpm test             # unit tests
 pnpm test:coverage    # unit tests with coverage thresholds
 pnpm verify           # typecheck + lint + format + test + build
 pnpm build            # production build into dist/
+pnpm test:e2e         # load the built extension in Chromium and drive it
 ```
+
+`pnpm test:e2e` needs a build first and a real browser, so it is deliberately not part of `pnpm verify`. It exists because jsdom has no layout and no paint: a card that rendered _behind_ the page, and a content script that was not listening yet, both passed the entire unit suite while the extension was unusable.
 
 ### Loading in Chrome or Edge
 
 1. Run `pnpm build`.
 2. Open `chrome://extensions`.
 3. Enable **Developer mode**.
-4. Click **Load unpacked** and choose the `dist/` directory.
+4. Click **Load unpacked** and choose the **`dist/`** directory.
 
-Tabs that were already open when you loaded the extension have no content script yet. The worker injects one on demand, but a page reload is the reliable fix.
+> **Load `dist/`, not the project root.** The root also contains a `manifest.json` — it is the build _input_ and points at `.ts`/`.tsx` sources. Chrome accepts it, because it is structurally valid, and then nothing works at all: the browser cannot execute TypeScript, so the service worker fails to register and you get a red **Errors** badge on the extension card.
+
+Tabs that were already open when you loaded the extension have no content script yet. The worker injects one on demand and waits for it to become ready before delivering, so the first right-click works — but reloading the page is still the quickest fix if anything looks stuck.
 
 ---
 

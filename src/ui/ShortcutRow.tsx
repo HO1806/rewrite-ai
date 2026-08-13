@@ -7,7 +7,7 @@ export function ShortcutRow() {
   return (
     <div className="kv-row">
       <span className="kv-row__key">Rewrite shortcut</span>
-      <span className="card__actions-group">
+      <span className="row">
         <kbd className="kbd">{shortcut}</kbd>
         <button
           type="button"

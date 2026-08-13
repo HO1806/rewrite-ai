@@ -6,6 +6,7 @@ function selectionFor(
   element: HTMLElement | null,
   elementType: SelectionInfo['elementType'],
   range: Range | null = null,
+  offsets: { start: number; end: number } | null = null,
 ): SelectionInfo {
   return {
     text: 'old',
@@ -13,6 +14,8 @@ function selectionFor(
     element,
     elementType,
     position: { top: 0, left: 0 },
+    selectionStart: offsets?.start ?? null,
+    selectionEnd: offsets?.end ?? null,
   };
 }
 
@@ -159,6 +162,64 @@ describe('replaceSelectedText in an input', () => {
     await replaceSelectedText(selectionFor(input, 'input'), 'new');
 
     expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Opening the card moves focus off the field, and a framework-controlled input
+ * reacts to the blur by reassigning `value`, which collapses the selection to
+ * the end. Re-reading the offsets at replace time therefore appended the rewrite
+ * to the user's original text — while still reporting a successful replacement.
+ */
+describe('replaceSelectedText uses the offsets captured at selection time', () => {
+  it('replaces the original range even after the field selection collapsed', async () => {
+    stubExecCommand('unsupported');
+    const textarea = document.createElement('textarea');
+    textarea.value = 'keep old keep';
+    document.body.appendChild(textarea);
+
+    // What a controlled component does on blur: caret at the end, nothing selected.
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+    const outcome = await replaceSelectedText(
+      selectionFor(textarea, 'textarea', null, { start: 5, end: 8 }),
+      'new',
+    );
+
+    expect(outcome).toBe('replaced');
+    expect(textarea.value).toBe('keep new keep');
+  });
+
+  it('does not append when the live selection is collapsed at the end', async () => {
+    stubExecCommand('unsupported');
+    const textarea = document.createElement('textarea');
+    textarea.value = 'original text';
+    document.body.appendChild(textarea);
+    textarea.setSelectionRange(13, 13);
+
+    await replaceSelectedText(
+      selectionFor(textarea, 'textarea', null, { start: 0, end: 13 }),
+      'rewritten',
+    );
+
+    expect(textarea.value).toBe('rewritten');
+    expect(textarea.value).not.toContain('original text');
+  });
+
+  it('refuses a stale range that no longer fits the field', async () => {
+    stubExecCommand('unsupported');
+    const textarea = document.createElement('textarea');
+    textarea.value = 'short';
+    document.body.appendChild(textarea);
+
+    // The page replaced the content with something shorter since capture.
+    const outcome = await replaceSelectedText(
+      selectionFor(textarea, 'textarea', null, { start: 40, end: 60 }),
+      'new',
+    );
+
+    expect(outcome).toBe('copied');
+    expect(textarea.value).toBe('short');
   });
 });
 

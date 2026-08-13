@@ -8,10 +8,12 @@
 
 import { useEffect, useState } from 'react';
 import { positionBelow } from '../selection';
+import { CARD } from '@/shared/constants';
 import type { CardPosition, SelectionInfo } from '@/shared/types';
 
 export function useAnchoredPosition(
   selectionInfo: SelectionInfo,
+  cardRef: React.RefObject<HTMLElement>,
 ): CardPosition {
   const [position, setPosition] = useState<CardPosition>(
     selectionInfo.position,
@@ -21,28 +23,45 @@ export function useAnchoredPosition(
     const anchor = resolveAnchor(selectionInfo);
     if (!anchor) return;
 
-    let frame = 0;
+    /**
+     * Measure the card rather than guessing. The initial position is computed
+     * before the card exists, from an estimate; once it is on screen its real
+     * height is known, and the drawer opening changes it again.
+     */
     const reposition = () => {
-      cancelAnimationFrame(frame);
-      // Coalesce bursts of scroll events into one measurement per frame.
-      frame = requestAnimationFrame(() => {
-        const rect = anchor();
-        if (rect) setPosition(positionBelow(rect));
-      });
+      const rect = anchor();
+      if (!rect) return;
+      const height = cardRef.current?.offsetHeight || CARD.height;
+      setPosition(positionBelow(rect, height));
     };
 
-    window.addEventListener('scroll', reposition, {
+    reposition();
+
+    let frame = 0;
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      // Coalesce bursts of scroll events into one measurement per frame.
+      frame = requestAnimationFrame(reposition);
+    };
+
+    window.addEventListener('scroll', schedule, {
       passive: true,
       capture: true,
     });
-    window.addEventListener('resize', reposition, { passive: true });
+    window.addEventListener('resize', schedule, { passive: true });
+
+    // The card's height changes when the adjust drawer opens or an error appears.
+    const card = cardRef.current;
+    const observer = card ? new ResizeObserver(schedule) : null;
+    if (card && observer) observer.observe(card);
 
     return () => {
       cancelAnimationFrame(frame);
-      window.removeEventListener('scroll', reposition, { capture: true });
-      window.removeEventListener('resize', reposition);
+      observer?.disconnect();
+      window.removeEventListener('scroll', schedule, { capture: true });
+      window.removeEventListener('resize', schedule);
     };
-  }, [selectionInfo]);
+  }, [selectionInfo, cardRef]);
 
   return position;
 }

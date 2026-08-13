@@ -45,6 +45,8 @@ function selectionIn(field: HTMLTextAreaElement): SelectionInfo {
     element: field,
     elementType: 'textarea',
     position: { top: 20, left: 20 },
+    selectionStart: 0,
+    selectionEnd: field.value.length,
   };
 }
 
@@ -206,6 +208,8 @@ describe('RewriteCard', () => {
           element: null,
           elementType: 'unknown',
           position: { top: 0, left: 0 },
+          selectionStart: null,
+          selectionEnd: null,
         }}
         initialAction="improve"
         onClose={onClose}

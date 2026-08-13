@@ -13,43 +13,77 @@ describe('sendMessageToTab', () => {
   it('delivers to a tab that already has the content script', async () => {
     await expect(sendMessageToTab(7, MESSAGE)).resolves.toEqual({ ok: true });
     expect(chromeMock.sentTabMessages).toEqual([
-      { tabId: 7, message: MESSAGE },
+      { tabId: 7, message: MESSAGE, frameId: undefined },
     ]);
     expect(chromeMock.executedScripts).toHaveLength(0);
   });
 
-  /**
-   * The recovery path. It previously injected a hardcoded Vite content-hash that
-   * no longer matched the build, and never resent the message afterwards — so a
-   * right-click on a pre-existing tab did nothing, silently.
-   */
-  it('injects the content script and resends when the first attempt fails', async () => {
-    chromeMock.tabMessageError = 'Receiving end does not exist';
-
-    const promise = sendMessageToTab(7, MESSAGE);
-    // Let the injection succeed, then allow the resend to land.
-    chromeMock.executeScriptError = null;
-    queueMicrotask(() => {
-      chromeMock.tabMessageError = null;
-    });
-
-    await expect(promise).resolves.toEqual({ ok: true });
-    expect(chromeMock.executedScripts).toHaveLength(1);
+  it('delivers to a single frame when one is named', async () => {
+    await expect(sendMessageToTab(7, MESSAGE, { frameId: 3 })).resolves.toEqual(
+      { ok: true },
+    );
     expect(chromeMock.sentTabMessages).toEqual([
-      { tabId: 7, message: MESSAGE },
+      { tabId: 7, message: MESSAGE, frameId: 3 },
     ]);
+  });
+
+  /**
+   * The regression that made the extension look dead. `executeScript` resolves
+   * as soon as the bundler's loader IIFE returns, while its dynamic import of
+   * the real module — and therefore the `onMessage` registration — is still
+   * pending. The old code resent immediately and lost that race every time.
+   */
+  it('waits for the content script to answer before delivering', async () => {
+    // Injection lands, but the script only starts answering on the 4th attempt.
+    chromeMock.attemptsUntilContentScriptReady = 4;
+
+    await expect(sendMessageToTab(7, MESSAGE)).resolves.toEqual({ ok: true });
+
+    expect(chromeMock.executedScripts).toHaveLength(1);
+    // A PING got through first, then the rewrite — and the rewrite is last, so it
+    // was never sent while the script was still unreachable.
+    expect(
+      chromeMock.sentTabMessages.map(
+        (entry) => (entry.message as { type: string }).type,
+      ),
+    ).toEqual(['PING', 'REWRITE_REQUEST']);
+  });
+
+  /** A retried rewrite could mount duplicate cards, so probing uses PING. */
+  it('probes with PING rather than repeating the rewrite', async () => {
+    chromeMock.attemptsUntilContentScriptReady = 3;
+
+    await sendMessageToTab(7, MESSAGE);
+
+    const rewrites = chromeMock.sentTabMessages.filter(
+      (entry) => (entry.message as { type: string }).type === 'REWRITE_REQUEST',
+    );
+    expect(rewrites).toHaveLength(1);
   });
 
   /** Reads the path from the manifest, so a rebuild cannot invalidate it. */
   it('injects the paths declared in the manifest, in all frames', async () => {
-    chromeMock.tabMessageError = 'Receiving end does not exist';
+    chromeMock.attemptsUntilContentScriptReady = 2;
 
     await sendMessageToTab(7, MESSAGE);
 
     expect(chromeMock.executedScripts[0]).toMatchObject({
       target: { tabId: 7, allFrames: true },
-      files: ['src/content/index.tsx'],
+      files: ['assets/index.tsx-loader-abc123.js'],
     });
+  });
+
+  it('gives up when the content script never answers', async () => {
+    chromeMock.tabMessageError = 'Receiving end does not exist';
+
+    const result = await sendMessageToTab(7, MESSAGE);
+
+    expect(result).toMatchObject({ ok: false, reason: 'unknown' });
+    expect(result).toHaveProperty(
+      'detail',
+      expect.stringContaining('did not respond'),
+    );
+    expect(chromeMock.executedScripts).toHaveLength(1);
   });
 
   it('reports a restricted page distinctly', async () => {
@@ -66,14 +100,6 @@ describe('sendMessageToTab', () => {
 
     const result = await sendMessageToTab(7, MESSAGE);
     expect(result).toMatchObject({ ok: false, reason: 'unknown' });
-  });
-
-  it('reports a failure when the resend also fails', async () => {
-    chromeMock.tabMessageError = 'Receiving end does not exist';
-
-    const result = await sendMessageToTab(7, MESSAGE);
-    expect(result).toMatchObject({ ok: false, reason: 'unknown' });
-    expect(chromeMock.executedScripts).toHaveLength(1);
   });
 
   it('reports a manifest with no content scripts', async () => {

@@ -38,6 +38,17 @@ export interface SelectionInfo {
   element: Element | null;
   elementType: 'textarea' | 'input' | 'contenteditable' | 'unknown';
   position: CardPosition;
+  /**
+   * Offsets captured at selection time, for form fields.
+   *
+   * These must be recorded up front and not re-read when replacing. Opening the
+   * card moves focus off the field, and a framework-controlled input reacts to
+   * the blur by reassigning `value`, which collapses the selection — so a
+   * re-read yields `start === end === value.length` and the rewrite gets
+   * appended instead of replacing anything.
+   */
+  selectionStart: number | null;
+  selectionEnd: number | null;
 }
 
 /**
@@ -52,7 +63,9 @@ export type BackgroundToContentMessage =
   | {
       type: 'TRIGGER_REWRITE';
       action: RewriteAction;
-    };
+    }
+  /** Readiness probe; the content script answers immediately. */
+  | { type: 'PING' };
 
 /**
  * Messages sent through the streaming port (background → content).

@@ -6,10 +6,10 @@
  */
 
 import { ACTIONS } from '@/shared/constants';
-import type { RewriteAction } from '@/shared/types';
+import type { BackgroundToContentMessage, RewriteAction } from '@/shared/types';
 import { registerContextMenus } from './contextMenus';
 import { registerStreamHandler } from './streamHandler';
-import { describeDeliveryFailure, sendMessageToTab } from './tabs';
+import { SendOptions, describeDeliveryFailure, sendMessageToTab } from './tabs';
 
 registerContextMenus();
 registerStreamHandler();
@@ -20,24 +20,30 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   const action = toRewriteAction(info.menuItemId);
   if (!action) return;
 
-  void deliver(tab.id, {
-    type: 'REWRITE_REQUEST',
-    action,
-    text: info.selectionText,
-  });
+  // Deliver to the frame the selection is actually in. Broadcasting to the tab
+  // means every frame receives it, and each frame without a selection opens its
+  // own card and bills its own request — nine of them on an ad-heavy page.
+  void deliver(
+    tab.id,
+    { type: 'REWRITE_REQUEST', action, text: info.selectionText },
+    { frameId: info.frameId },
+  );
 });
 
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command !== 'improve-writing' || !tab?.id) return;
 
+  // A command carries no frame id. Broadcasting is safe here because
+  // TRIGGER_REWRITE has no text, so a frame with no live selection does nothing.
   void deliver(tab.id, { type: 'TRIGGER_REWRITE', action: 'improve' });
 });
 
 async function deliver(
   tabId: number,
-  message: Parameters<typeof sendMessageToTab>[1],
+  message: BackgroundToContentMessage,
+  options?: SendOptions,
 ): Promise<void> {
-  const result = await sendMessageToTab(tabId, message);
+  const result = await sendMessageToTab(tabId, message, options);
   if (!result.ok) {
     console.warn(
       `[Rewrite AI] ${describeDeliveryFailure(result)} (${result.detail})`,

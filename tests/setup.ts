@@ -25,6 +25,19 @@ if (typeof Range.prototype.getBoundingClientRect !== 'function') {
   };
 }
 
+/**
+ * jsdom does not implement ResizeObserver. The card uses one to reposition when
+ * the adjust drawer changes its height; a no-op stub is enough here, and the
+ * real behaviour is covered by the Playwright suite.
+ */
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  } as unknown as typeof ResizeObserver;
+}
+
 beforeEach(() => {
   chromeMock = installChromeMock();
 });

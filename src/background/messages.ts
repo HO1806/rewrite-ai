@@ -53,6 +53,14 @@ export const backgroundToContentMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('TRIGGER_REWRITE'),
     action: rewriteActionSchema,
   }),
+  /**
+   * Readiness probe. The worker polls this after injecting the content script,
+   * because injection completing does not mean the script is listening — see
+   * the note in background/tabs.ts.
+   */
+  z.object({
+    type: z.literal('PING'),
+  }),
 ]) satisfies z.ZodType<BackgroundToContentMessage>;
 
 /**
