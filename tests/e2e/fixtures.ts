@@ -11,7 +11,8 @@ import {
   type BrowserContext,
   type Worker,
 } from '@playwright/test';
-import { createServer, type Server } from 'node:http';
+import { build as esbuild } from 'esbuild';
+import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -31,6 +32,7 @@ export const FIXTURE_HTML = `<!doctype html>
   #overlay { position: fixed; inset: 0 0 auto 0; height: 460px; z-index: 9999;
              background: rgba(0, 128, 0, 0.25); }
   main { padding: 16px; position: relative; z-index: 1; }
+  #ce { border: 1px solid #999; padding: 8px; }
 </style></head>
 <body>
   <header id="header">sticky header</header>
@@ -39,8 +41,104 @@ export const FIXTURE_HTML = `<!doctype html>
     <p id="para">The way we work is changing faster than ever before.</p>
     <textarea id="ta" rows="3" cols="40">their going to the meating tomorow</textarea>
     <input id="inp" type="text" size="40" value="recieve the pakage" />
+    <!-- Stands in for Gmail: an ordinary contenteditable, the editor shape the
+         extension is used in most, and one no test covered at all. -->
+    <div id="ce" contenteditable="true">their going to the meating tomorow</div>
+    <!-- Stands in for Lexical / ProseMirror / Slate, as used by WhatsApp Web,
+         Facebook and LinkedIn: the DOM is a rendering of an internal model, the
+         model is built from beforeinput, and anything the editor did not author
+         itself is reverted on the next input. execCommand insertText dispatches
+         no beforeinput, so an edit made that way is invisible to such an
+         editor. -->
+    <div id="ce-model" contenteditable="true">their going to the meating tomorow</div>
+    <!-- An editor that ignores everything we offer it and appends regardless,
+         over the nested shape a real editor uses. Nothing can make this one
+         substitute; the requirement is that the card says so instead of claiming
+         success, and that it does not report "Copied instead" as though the field
+         had been left alone. -->
+    <div id="ce-hostile" contenteditable="true"><p><span>their going to the meating tomorow</span></p></div>
   </main>
+  <script>
+    (() => {
+      const hostile = document.getElementById('ce-hostile');
+      hostile.addEventListener('beforeinput', (event) => {
+        if (event.inputType !== 'insertText' || event.data == null) return;
+        event.preventDefault();
+        const span = hostile.querySelector('span');
+        span.textContent = span.textContent + event.data;
+      });
+    })();
+
+    (() => {
+      const el = document.getElementById('ce-model');
+      let model = el.textContent;
+
+      el.addEventListener('beforeinput', (event) => {
+        if (event.inputType !== 'insertText' || event.data == null) return;
+        event.preventDefault();
+        // A real editor maps the DOM selection onto its own document; locating
+        // the selected string is a faithful enough stand-in. When it cannot
+        // find it, the text lands at the end — the reported symptom exactly.
+        const selected = getSelection().toString();
+        const at = selected ? model.indexOf(selected) : -1;
+        model =
+          at >= 0
+            ? model.slice(0, at) + event.data + model.slice(at + selected.length)
+            : model + event.data;
+        el.textContent = model;
+      });
+
+      el.addEventListener('input', () => {
+        if (el.textContent !== model) el.textContent = model;
+      });
+    })();
+  </script>
 </body></html>`;
+
+/**
+ * A page running the real Lexical editor.
+ *
+ * WhatsApp Web's composer is Lexical, and the reported bug — the rewrite landing
+ * beside the original instead of over it — was reproducible there while every
+ * hand-written stand-in in this file passed. Modelling an editor is not the same
+ * as testing one, so this mounts the genuine article from npm.
+ */
+export const LEXICAL_HTML = `<!doctype html>
+<html><head><meta charset="utf-8"><title>lexical</title><style>
+  body { margin: 0; font: 16px system-ui; padding: 16px; }
+  #editor { border: 1px solid #999; padding: 8px; min-height: 3em; }
+</style></head>
+<body>
+  <div id="editor" contenteditable="true"></div>
+  <script src="/lexical-bundle.js"></script>
+</body></html>`;
+
+/** The message the Lexical fixture starts with. */
+export const LEXICAL_ORIGINAL = 'their going to the meating tomorow';
+
+/**
+ * Bundled on demand with esbuild, because the browser cannot resolve the bare
+ * specifiers Lexical's ESM entry points use.
+ */
+const LEXICAL_ENTRY = `
+import { createEditor, $getRoot, $createParagraphNode, $createTextNode } from 'lexical';
+import { registerPlainText } from '@lexical/plain-text';
+
+const element = document.getElementById('editor');
+const editor = createEditor({ namespace: 'fixture', onError: (error) => { throw error; } });
+editor.setRootElement(element);
+registerPlainText(editor);
+
+editor.update(() => {
+  const paragraph = $createParagraphNode();
+  paragraph.append($createTextNode(${JSON.stringify(LEXICAL_ORIGINAL)}));
+  $getRoot().clear().append(paragraph);
+});
+
+// Let the test read what Lexical itself believes its content to be, rather than
+// trusting the DOM the extension may have written to directly.
+window.__lexicalText = () => editor.getEditorState().read(() => $getRoot().getTextContent());
+`;
 
 export interface ExtensionFixtures {
   context: BrowserContext;
@@ -50,6 +148,8 @@ export interface ExtensionFixtures {
   providerUrl: string;
   /** URL of the host page fixture. */
   pageUrl: string;
+  /** URL of a page running the real Lexical editor. */
+  lexicalUrl: string;
   /** Configure the extension's stored settings. */
   seedSettings: (overrides?: Record<string, unknown>) => Promise<void>;
 }
@@ -100,6 +200,24 @@ export const test = base.extend<ExtensionFixtures>({
     server.close();
   },
 
+  lexicalUrl: async ({}, use) => {
+    const bundle = await bundleLexical();
+    const server = createServer((req, res) => {
+      if (req.url?.startsWith('/lexical-bundle.js')) {
+        res.writeHead(200, {
+          'Content-Type': 'text/javascript; charset=utf-8',
+        });
+        res.end(bundle);
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(LEXICAL_HTML);
+    });
+    await listen(server);
+    await use(`http://127.0.0.1:${port(server)}/`);
+    server.close();
+  },
+
   seedSettings: async ({ worker, providerUrl }, use) => {
     await use(async (overrides = {}) => {
       await worker.evaluate(
@@ -134,27 +252,54 @@ function startProviderStub(): Promise<Server> {
       return;
     }
 
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Access-Control-Allow-Origin': '*',
+    // The body decides the length: a test that needs to grow the card past a
+    // short viewport asks for the long completion by its input text.
+    void readBody(req).then((body) => {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Access-Control-Allow-Origin': '*',
+      });
+      for (const piece of body.includes(LONG_INPUT) ? LONG_PIECES : PIECES) {
+        res.write(
+          `data: ${JSON.stringify({ choices: [{ delta: { content: piece } }] })}\n\n`,
+        );
+      }
+      res.write('data: [DONE]\n\n');
+      res.end();
     });
-    for (const piece of [
-      'They ',
-      'are ',
-      'going ',
-      'to ',
-      'the ',
-      'meeting.',
-    ]) {
-      res.write(
-        `data: ${JSON.stringify({ choices: [{ delta: { content: piece } }] })}\n\n`,
-      );
-    }
-    res.write('data: [DONE]\n\n');
-    res.end();
   });
 
   return listen(server).then(() => server);
+}
+
+let lexicalBundle: string | null = null;
+
+/** Bundle the Lexical entry once per run; the result is a plain classic script. */
+async function bundleLexical(): Promise<string> {
+  if (lexicalBundle !== null) return lexicalBundle;
+
+  const result = await esbuild({
+    stdin: {
+      contents: LEXICAL_ENTRY,
+      resolveDir: resolve(dirname(fileURLToPath(import.meta.url)), '../..'),
+      loader: 'js',
+    },
+    bundle: true,
+    format: 'iife',
+    write: false,
+    define: { 'process.env.NODE_ENV': '"development"' },
+  });
+
+  lexicalBundle = result.outputFiles[0]?.text ?? '';
+  return lexicalBundle;
+}
+
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((done) => {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => done(body));
+  });
 }
 
 function listen(server: Server): Promise<void> {
@@ -168,5 +313,22 @@ function port(server: Server): number {
   return address.port;
 }
 
+const PIECES = ['They ', 'are ', 'going ', 'to ', 'the ', 'meeting.'];
+
 /** The completion the provider stub streams. */
 export const EXPECTED_REWRITE = 'They are going to the meeting.';
+
+/**
+ * Input that asks the stub for a completion long enough to fill the output area.
+ *
+ * A short suggestion leaves the card at roughly its estimated height, which is
+ * why the clipped action bar only showed up on long rewrites.
+ */
+export const LONG_INPUT = 'please-make-this-long';
+
+const LONG_SENTENCE =
+  'This suggestion is deliberately long so that it fills the output area and grows the card. ';
+const LONG_PIECES = Array.from({ length: 10 }, () => LONG_SENTENCE);
+
+/** A fragment of the long completion, for asserting it arrived. */
+export const LONG_REWRITE_FRAGMENT = 'fills the output area';

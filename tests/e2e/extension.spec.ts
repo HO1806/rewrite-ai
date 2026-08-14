@@ -7,7 +7,14 @@
  * while the extension was completely unusable in Chrome.
  */
 
-import { EXPECTED_REWRITE, expect, test } from './fixtures';
+import {
+  EXPECTED_REWRITE,
+  LEXICAL_ORIGINAL,
+  LONG_INPUT,
+  LONG_REWRITE_FRAGMENT,
+  expect,
+  test,
+} from './fixtures';
 import type { Page } from '@playwright/test';
 
 type Worker = import('@playwright/test').Worker;
@@ -89,6 +96,89 @@ async function selectAllIn(page: Page, id: string): Promise<void> {
     el.setSelectionRange(0, el.value.length);
     document.dispatchEvent(new Event('selectionchange'));
   }, id);
+}
+
+/**
+ * Select the whole of a contenteditable.
+ *
+ * A form field exposes offsets; a rich editor only has a Range, which is the
+ * fragile half of the replacement path — it has to survive the card taking focus.
+ */
+async function selectAllInEditable(page: Page, id: string): Promise<void> {
+  await page.evaluate((target) => {
+    const el = document.getElementById(target)!;
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const selection = getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+  }, id);
+}
+
+/**
+ * Announce the current selection until the content script reacts.
+ *
+ * `page.goto` resolves while the content script's dynamic import is still in
+ * flight — the same race the worker's PING backoff exists for. A single
+ * `selectionchange` dispatched straight after navigation can land before
+ * `registerInlineTrigger` has run, and a missed event never comes back, so no
+ * amount of assertion retrying recovers it. Re-announcing is safe: the watcher
+ * re-reads the same live selection.
+ */
+async function announceSelection(page: Page): Promise<void> {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await page.evaluate(() =>
+      document.dispatchEvent(new Event('selectionchange')),
+    );
+    if (await page.locator('#rewrite-ai-trigger').count()) return;
+    await page.waitForTimeout(100);
+  }
+  throw new Error('the inline trigger never appeared');
+}
+
+/**
+ * Measure the card against the viewport, from inside the page.
+ *
+ * Runs in the browser, so it cannot close over anything from the test file.
+ */
+function measureCard() {
+  const host = document.getElementById('rewrite-ai-root')!;
+  const root = host.shadowRoot!;
+  const card = root.querySelector('.card')!;
+  const actions = root.querySelector('.card__actions')!;
+  const cardBox = card.getBoundingClientRect();
+  const actionBox = actions.getBoundingClientRect();
+  const hit = document.elementFromPoint(
+    actionBox.left + actionBox.width / 2,
+    actionBox.top + actionBox.height / 2,
+  );
+
+  return {
+    viewportHeight: window.innerHeight,
+    overhang: Math.max(
+      cardBox.bottom - window.innerHeight,
+      actionBox.bottom - window.innerHeight,
+    ),
+    cardBottom: cardBox.bottom,
+    actionBottom: actionBox.bottom,
+    topmostAtActions: hit?.id ?? hit?.tagName ?? null,
+    maxHeight: getComputedStyle(card).maxHeight,
+    outputHeight: root.querySelector('.card__output')!.getBoundingClientRect()
+      .height,
+  };
+}
+
+/** Put text in a field so the rewrite runs against it. */
+async function setValue(page: Page, id: string, value: string): Promise<void> {
+  await page.evaluate(
+    ([target, next]) => {
+      const el = document.getElementById(target!) as HTMLTextAreaElement;
+      el.value = next!;
+    },
+    [id, value] as const,
+  );
 }
 
 test.describe('extension loads', () => {
@@ -224,6 +314,61 @@ test.describe('the floating card', () => {
     await expect(page.getByRole('button', { name: /^Replace$/ })).toBeEnabled();
   });
 
+  /**
+   * A long suggestion must not push the buttons off the bottom of the screen.
+   *
+   * The card is `position: fixed`, so an overhanging action bar cannot be
+   * scrolled into view by anything — it is simply gone. The card grows from its
+   * ~220px estimate to ~400px as text streams in, and `positionAnchored` clamps
+   * against a height capped to the viewport, so it never notices the overflow.
+   * Edge pins its buttons and scrolls the suggestion; so do we.
+   */
+  test('keeps the action bar on screen for a long suggestion in a short window', async ({
+    context,
+    worker,
+    pageUrl,
+  }) => {
+    const page = await context.newPage();
+    // Short enough that the grown card cannot fit — a laptop window, or any
+    // window at 150% zoom.
+    await page.setViewportSize({ width: 1280, height: 380 });
+    await page.goto(pageUrl);
+
+    // The provider stub keys its length off the input, and the content script
+    // rewrites the live selection rather than the text in the message.
+    await setValue(page, 'ta', LONG_INPUT);
+    await selectAllIn(page, 'ta');
+    await triggerRewrite(worker, LONG_INPUT);
+
+    await expect(card(page)).toContainText(LONG_REWRITE_FRAGMENT);
+
+    // Polled, not read once: the card is capped by CSS as it grows and then
+    // re-anchored on the next frame, so a single-shot read can catch the old
+    // top with the new height.
+    await expect
+      .poll(() => page.evaluate(measureCard).then((m) => m.overhang))
+      .toBeLessThanOrEqual(0);
+
+    const geometry = await page.evaluate(measureCard);
+    // Visible is not enough — the buttons must be what a click would land on.
+    expect(geometry.topmostAtActions).toBe('rewrite-ai-root');
+    await expect(page.getByRole('button', { name: /^Replace$/ })).toBeEnabled();
+
+    // The cap has to resolve to a real length. `--card-max-height` comes from
+    // CARD.margin via the shadow stylesheet, and an undefined custom property
+    // makes the whole declaration invalid — silently restoring the bug.
+    expect(geometry.maxHeight).toMatch(/^\d+(\.\d+)?px$/);
+    // The suggestion area is what gave way, and it is still readable.
+    expect(geometry.outputHeight).toBeGreaterThan(100);
+
+    // Opening Adjust adds another ~130px, so it is what overflows first.
+    await page.getByRole('button', { name: /Adjust/ }).click();
+    await expect
+      .poll(() => page.evaluate(measureCard).then((m) => m.overhang))
+      .toBeLessThanOrEqual(0);
+    await expect(page.getByRole('button', { name: /^Replace$/ })).toBeVisible();
+  });
+
   test('is dismissed by Escape', async ({ context, worker, pageUrl }) => {
     const page = await context.newPage();
     await page.goto(pageUrl);
@@ -255,6 +400,7 @@ test.describe('the inline trigger', () => {
 
     await expect(trigger(page)).toHaveCount(0);
     await selectAllIn(page, 'ta');
+    await announceSelection(page);
 
     await expect(trigger(page)).toBeVisible();
     await expect(trigger(page)).toContainText('Rewrite');
@@ -279,6 +425,7 @@ test.describe('the inline trigger', () => {
     const page = await context.newPage();
     await page.goto(pageUrl);
     await selectAllIn(page, 'inp');
+    await announceSelection(page);
 
     await expect(trigger(page)).toBeVisible();
   });
@@ -310,6 +457,7 @@ test.describe('the inline trigger', () => {
     const page = await context.newPage();
     await page.goto(pageUrl);
     await selectAllIn(page, 'ta');
+    await announceSelection(page);
     await expect(trigger(page)).toBeVisible();
 
     await trigger(page).click();
@@ -327,6 +475,7 @@ test.describe('the inline trigger', () => {
     const page = await context.newPage();
     await page.goto(pageUrl);
     await selectAllIn(page, 'ta');
+    await announceSelection(page);
 
     await trigger(page).click();
     await expect(card(page)).toContainText(EXPECTED_REWRITE);
@@ -339,6 +488,7 @@ test.describe('the inline trigger', () => {
     const page = await context.newPage();
     await page.goto(pageUrl);
     await selectAllIn(page, 'ta');
+    await announceSelection(page);
     await expect(trigger(page)).toBeVisible();
 
     await page.evaluate(() => {
@@ -397,6 +547,144 @@ test.describe('replacement', () => {
       expect(value).not.toContain(field.original);
     });
   }
+
+  /**
+   * The reported bug, in the editor shape it was reported from: "it adds the
+   * generated text next to the one that should be replaced".
+   *
+   * A rich editor gives us only a Range, and clicking Replace moves the page
+   * selection. If the captured range is the selection's own range it collapses
+   * along with it, and `insertText` then writes at a caret beside the original
+   * instead of over it. Only a real browser has a real selection to collapse.
+   */
+  test('substitutes the selected text in a contenteditable', async ({
+    context,
+    pageUrl,
+  }) => {
+    const original = 'their going to the meating tomorow';
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+
+    await selectAllInEditable(page, 'ce');
+    await announceSelection(page);
+    await expect(trigger(page)).toBeVisible();
+
+    // Real clicks throughout: the mousedown on each button is what moves the
+    // selection, and that is the whole mechanism under test.
+    await trigger(page).click();
+    await expect(card(page)).toContainText(EXPECTED_REWRITE);
+    await page.getByRole('button', { name: /^Replace$/ }).click();
+
+    await expect(page.locator('#ce')).toHaveText(EXPECTED_REWRITE);
+    const text = await page.locator('#ce').innerText();
+    expect(text).not.toContain(original);
+  });
+
+  /**
+   * The same thing in a framework editor that owns its document.
+   *
+   * `execCommand('insertText')` dispatches no `beforeinput`, so an editor that
+   * builds its model from that event never learns of the edit and reverts it on
+   * the next reconcile — while the card still reported "Replaced". The edit has
+   * to be offered to the editor through the hook it actually listens to.
+   */
+  test('substitutes in an editor that owns its own document', async ({
+    context,
+    pageUrl,
+  }) => {
+    const original = 'their going to the meating tomorow';
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+
+    await selectAllInEditable(page, 'ce-model');
+    await announceSelection(page);
+
+    await trigger(page).click();
+    await expect(card(page)).toContainText(EXPECTED_REWRITE);
+    await page.getByRole('button', { name: /^Replace$/ }).click();
+
+    await expect(page.locator('#ce-model')).toHaveText(EXPECTED_REWRITE);
+    const text = await page.locator('#ce-model').innerText();
+    expect(text).not.toContain(original);
+  });
+});
+
+/**
+ * When it cannot be done, say so accurately.
+ *
+ * No amount of correct sequencing can make an editor that ignores every hook
+ * substitute anything. What must not happen is the card claiming success — or
+ * saying "Copied instead", which reads as "your field was left alone" while a
+ * doubled message sits in it.
+ */
+test.describe('an editor that cannot be persuaded', () => {
+  test.beforeEach(async ({ seedSettings }) => {
+    await seedSettings();
+  });
+
+  test('admits the field needs checking instead of claiming success', async ({
+    context,
+    pageUrl,
+  }) => {
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+
+    await selectAllInEditable(page, 'ce-hostile');
+    await announceSelection(page);
+    await trigger(page).click();
+    await expect(card(page)).toContainText(EXPECTED_REWRITE);
+
+    await page.getByRole('button', { name: /^Replace$/ }).click();
+
+    await expect(
+      page.getByRole('button', { name: /Copied — check the field/ }),
+    ).toBeVisible();
+    // And it stays open, rather than auto-dismissing over a broken result.
+    await expect(card(page)).toBeVisible();
+  });
+});
+
+/**
+ * The real editor from the bug report.
+ *
+ * WhatsApp Web's composer is Lexical. Every hand-written stand-in in fixtures.ts
+ * passed while the extension was still appending the rewrite in the actual
+ * product, so this mounts Lexical itself from npm — the only test here that can
+ * settle whether the fix works.
+ */
+test.describe('a real Lexical editor', () => {
+  test.beforeEach(async ({ seedSettings }) => {
+    await seedSettings();
+  });
+
+  test('substitutes the selection rather than adding to it', async ({
+    context,
+    lexicalUrl,
+  }) => {
+    const page = await context.newPage();
+    await page.goto(lexicalUrl);
+    // Lexical mounts and commits its initial state asynchronously.
+    await expect(page.locator('#editor')).toContainText(LEXICAL_ORIGINAL);
+
+    await selectAllInEditable(page, 'editor');
+    await announceSelection(page);
+    await trigger(page).click();
+    await expect(card(page)).toContainText(EXPECTED_REWRITE);
+
+    await page.getByRole('button', { name: /^Replace$/ }).click();
+
+    // Lexical's own document, not just the DOM: the DOM can hold text Lexical is
+    // about to revert, which is how a replacement could look successful and then
+    // vanish.
+    await expect
+      .poll(() => page.evaluate(() => window.__lexicalText?.() ?? ''))
+      .toBe(EXPECTED_REWRITE);
+
+    const dom = await page.locator('#editor').innerText();
+    expect(dom).toBe(EXPECTED_REWRITE);
+    // The reported symptom, asserted directly: "message 1. message 2".
+    expect(dom).not.toContain(LEXICAL_ORIGINAL);
+  });
 });
 
 test.describe('content script recovery', () => {

@@ -53,6 +53,8 @@ export function RewriteCard({
 
   const cardRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Held in a ref, not state: the guard has to be read synchronously. */
+  const isReplacing = useRef(false);
   const titleId = useId();
 
   const { text, isGenerating, error, start } = useStreamingRewrite();
@@ -78,15 +80,25 @@ export function RewriteCard({
   const canAct = Boolean(text) && !isGenerating && !error;
 
   const handleReplace = async () => {
-    if (!text) return;
+    /**
+     * Replacement now yields to the event loop — an editor that keeps its own
+     * selection has to observe ours before the edit is offered — so a second
+     * click can land mid-flight and insert the text twice.
+     */
+    if (!text || isReplacing.current) return;
+    isReplacing.current = true;
 
-    const result = await replaceSelectedText(selectionInfo, text);
-    setOutcome(result);
+    try {
+      const result = await replaceSelectedText(selectionInfo, text);
+      setOutcome(result);
 
-    // Only auto-dismiss when the replacement actually landed; if it fell back
-    // to the clipboard the user needs to see that and paste it themselves.
-    if (result === 'replaced') {
-      closeTimer.current = setTimeout(onClose, CLOSE_DELAY_MS);
+      // Only auto-dismiss when there is nothing left for the user to do. A
+      // clipboard fallback has to stay on screen so they can see it and paste.
+      if (result === 'replaced' || result === 'unchanged') {
+        closeTimer.current = setTimeout(onClose, CLOSE_DELAY_MS);
+      }
+    } finally {
+      isReplacing.current = false;
     }
   };
 

@@ -84,7 +84,16 @@ function readWindowSelection(): SelectionInfo | null {
   const text = selection.toString().trim();
   if (!text) return null;
 
-  const range = selection.getRangeAt(0);
+  /**
+   * A snapshot, not the selection's own range.
+   *
+   * `getRangeAt(0)` hands back the very object the selection holds — the same
+   * reference on every call — so writing to it writes to the page's live
+   * selection. `replace.ts` moves this range's boundaries while inserting, which
+   * would otherwise reach back into the document. A clone still tracks DOM
+   * mutation, which is what the detached-range check relies on.
+   */
+  const range = selection.getRangeAt(0).cloneRange();
   const container = range.commonAncestorContainer;
   const element =
     container.nodeType === Node.ELEMENT_NODE
@@ -148,7 +157,15 @@ export function positionAnchored(
   const { margin } = CARD;
   const { width, offset } = size;
 
-  // Never claim more room than the viewport has.
+  /**
+   * Never claim more room than the viewport has.
+   *
+   * This clamp only keeps the surface on screen because the surface itself is
+   * capped to the same height — `--card-max-height` in the shadow stylesheet,
+   * consumed by `.card`. Without that cap a measured height larger than the
+   * viewport was silently reduced here, and the card then overhung the bottom
+   * edge by the difference, taking its action bar with it.
+   */
   const height = Math.min(size.height, window.innerHeight - 2 * margin);
 
   const fitsBelow =

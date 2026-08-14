@@ -92,8 +92,14 @@ function replaceLabel(outcome: ReplaceOutcome | null): string {
   switch (outcome) {
     case 'replaced':
       return 'Replaced';
+    case 'unchanged':
+      return 'No change needed';
     case 'copied':
       return 'Copied instead';
+    // The page was modified but not verifiably substituted, so saying "Copied
+    // instead" would imply the field was left untouched when it was not.
+    case 'copied-dirty':
+      return 'Copied — check the field';
     case 'failed':
       return 'Could not replace';
     default:

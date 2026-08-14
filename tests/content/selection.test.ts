@@ -146,6 +146,24 @@ describe('getSelectionInfo for window selections', () => {
     });
   });
 
+  /**
+   * `getRangeAt(0)` returns the object the selection itself holds — the same
+   * reference every call — so an uncloned range makes the replacement code's
+   * boundary moves write straight into the page's live selection.
+   */
+  it("captures a snapshot of the range, not the selection's own object", () => {
+    const paragraph = document.createElement('p');
+    paragraph.textContent = 'some text';
+    document.body.appendChild(paragraph);
+    selectContents(paragraph);
+
+    const live = window.getSelection()!.getRangeAt(0);
+    const info = getSelectionInfo();
+
+    expect(info!.range).not.toBe(live);
+    expect(info!.range!.toString()).toBe('some text');
+  });
+
   it('classifies static page text as unknown but still returns it', () => {
     const paragraph = document.createElement('p');
     paragraph.textContent = 'just reading';

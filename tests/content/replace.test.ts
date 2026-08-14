@@ -23,6 +23,10 @@ function selectionFor(
  * jsdom does not implement execCommand. Tests that need the native-setter path
  * leave it returning false; tests for the undo-preserving path make it apply the
  * edit itself, the way a real browser would.
+ *
+ * Applying it for real matters now that the outcome is verified against the DOM:
+ * a stub that returns true without editing anything is indistinguishable from an
+ * editor that threw the edit away, which is exactly what it should be.
  */
 function stubExecCommand(behaviour: 'unsupported' | 'insert'): void {
   document.execCommand = vi.fn(
@@ -32,12 +36,20 @@ function stubExecCommand(behaviour: 'unsupported' | 'insert'): void {
 
       const field = document.activeElement as
         HTMLInputElement | HTMLTextAreaElement | null;
-      if (!field || !('value' in field)) return false;
+      if (field && 'value' in field) {
+        const start = field.selectionStart ?? 0;
+        const end = field.selectionEnd ?? 0;
+        field.value =
+          field.value.slice(0, start) + (value ?? '') + field.value.slice(end);
+        return true;
+      }
 
-      const start = field.selectionStart ?? 0;
-      const end = field.selectionEnd ?? 0;
-      field.value =
-        field.value.slice(0, start) + (value ?? '') + field.value.slice(end);
+      // Contenteditable: insertText replaces the current selection.
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return false;
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(document.createTextNode(value ?? ''));
       return true;
     },
   ) as typeof document.execCommand;
@@ -241,7 +253,7 @@ describe('replaceSelectedText in a contenteditable', () => {
   }
 
   it('inserts via execCommand when available', async () => {
-    document.execCommand = vi.fn(() => true) as typeof document.execCommand;
+    stubExecCommand('insert');
     const { host, range } = buildEditable('old');
 
     const outcome = await replaceSelectedText(
@@ -250,6 +262,7 @@ describe('replaceSelectedText in a contenteditable', () => {
     );
 
     expect(outcome).toBe('replaced');
+    expect(host.textContent).toBe('new');
     expect(document.execCommand).toHaveBeenCalledWith(
       'insertText',
       false,
@@ -258,7 +271,7 @@ describe('replaceSelectedText in a contenteditable', () => {
   });
 
   it('falls back to manual DOM insertion when execCommand is unavailable', async () => {
-    document.execCommand = vi.fn(() => false) as typeof document.execCommand;
+    stubExecCommand('unsupported');
     const { host, range } = buildEditable('old');
 
     const outcome = await replaceSelectedText(
@@ -270,8 +283,35 @@ describe('replaceSelectedText in a contenteditable', () => {
     expect(host.textContent).toBe('new');
   });
 
-  it('dispatches an InputEvent so React-backed editors resync', async () => {
-    document.execCommand = vi.fn(() => true) as typeof document.execCommand;
+  /**
+   * The regression guard for a doubled insertion. `execCommand` fires a trusted
+   * `input` of its own, so a synthetic one on top of it invites an editor that
+   * applies `input` events to write the same text a second time.
+   */
+  it('does not add its own input event after execCommand', async () => {
+    stubExecCommand('insert');
+    const { host, range } = buildEditable('old');
+
+    const inputEvents: InputEvent[] = [];
+    host.addEventListener('input', (event) =>
+      inputEvents.push(event as InputEvent),
+    );
+
+    await replaceSelectedText(
+      selectionFor(host, 'contenteditable', range),
+      'new',
+    );
+
+    expect(inputEvents).toHaveLength(0);
+  });
+
+  /**
+   * The manual path writes the DOM itself, so nothing else will announce it —
+   * but it announces the change without claiming to be an insertion, because an
+   * editor that trusted `inputType: 'insertText'` would apply the text again.
+   */
+  it('announces the manual path without describing it as an insertion', async () => {
+    stubExecCommand('unsupported');
     const { host, range } = buildEditable('old');
 
     const inputEvents: InputEvent[] = [];
@@ -285,7 +325,8 @@ describe('replaceSelectedText in a contenteditable', () => {
     );
 
     expect(inputEvents).toHaveLength(1);
-    expect(inputEvents[0]!.inputType).toBe('insertText');
+    expect(inputEvents[0]!.inputType).toBe('');
+    expect(inputEvents[0]!.data).toBeNull();
   });
 
   /**
@@ -294,7 +335,7 @@ describe('replaceSelectedText in a contenteditable', () => {
    * the user never sees.
    */
   it('copies instead when the captured range has been detached', async () => {
-    document.execCommand = vi.fn(() => true) as typeof document.execCommand;
+    stubExecCommand('insert');
     const { host, range } = buildEditable('old');
     host.remove();
 
@@ -305,6 +346,145 @@ describe('replaceSelectedText in a contenteditable', () => {
 
     expect(outcome).toBe('copied');
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('new');
+  });
+
+  /**
+   * Lexical, ProseMirror and Slate own their document and apply edits from
+   * `beforeinput`. Offering it to them first is the only way in — and once they
+   * have taken it, inserting as well would put the text in twice.
+   */
+  it('lets an editor that claims beforeinput apply the edit itself', async () => {
+    stubExecCommand('insert');
+    const { host, range } = buildEditable('old');
+    host.addEventListener('beforeinput', (event) => {
+      event.preventDefault();
+      host.textContent = `${(event as InputEvent).data}`;
+    });
+
+    const outcome = await replaceSelectedText(
+      selectionFor(host, 'contenteditable', range),
+      'new',
+    );
+
+    expect(outcome).toBe('replaced');
+    expect(host.textContent).toBe('new');
+    expect(document.execCommand).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The failure that reported itself as a success: an editor reconciles its own
+   * document over the top and the rewrite is gone, while the card said
+   * "Replaced".
+   */
+  it('reports copied when the editor throws the edit away', async () => {
+    stubExecCommand('insert');
+    const { host, range } = buildEditable('old');
+
+    /**
+     * Reverted from a MutationObserver, as Lexical does — asynchronously, and
+     * without waiting to be told. That timing is why the outcome is verified a
+     * frame and a task later rather than immediately: a synchronous check reports
+     * success for an edit that is about to be undone.
+     */
+    const observer = new MutationObserver(() => {
+      if (host.textContent !== 'old') host.textContent = 'old';
+    });
+    observer.observe(host, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+
+    try {
+      const outcome = await replaceSelectedText(
+        selectionFor(host, 'contenteditable', range),
+        'new',
+      );
+
+      expect(outcome).toBe('copied');
+      expect(host.textContent).toBe('old');
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('new');
+    } finally {
+      observer.disconnect();
+    }
+  });
+
+  /**
+   * The reported symptom — "message 1. message 2".
+   *
+   * The page has been changed, so "Copied instead" would be a lie by omission:
+   * it reads as "the field was left alone" while a doubled message sits in it.
+   */
+  it('says the field needs checking when the rewrite lands beside the original', async () => {
+    stubExecCommand('insert');
+    const { host, range } = buildEditable('old');
+    host.addEventListener('beforeinput', (event) => {
+      event.preventDefault();
+      host.textContent = `old${(event as InputEvent).data}`;
+    });
+
+    const outcome = await replaceSelectedText(
+      selectionFor(host, 'contenteditable', range),
+      'new',
+    );
+
+    expect(outcome).toBe('copied-dirty');
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('new');
+  });
+
+  /**
+   * The false negative in the first attempt at this fix: a legitimate Expand
+   * contains the original, and `!after.includes(before)` rejected every one of
+   * them as a failure.
+   */
+  it('accepts a rewrite that legitimately contains the original', async () => {
+    stubExecCommand('insert');
+    const { host, range } = buildEditable('ship it');
+
+    const outcome = await replaceSelectedText(
+      { ...selectionFor(host, 'contenteditable', range), text: 'ship it' },
+      'ship it today, without fail',
+    );
+
+    expect(outcome).toBe('replaced');
+    expect(host.textContent).toBe('ship it today, without fail');
+  });
+
+  /** Whitespace alone is not a change worth writing into the page. */
+  it('reports an unchanged rewrite without touching the page', async () => {
+    stubExecCommand('insert');
+    const { host, range } = buildEditable('already right');
+
+    const outcome = await replaceSelectedText(
+      {
+        ...selectionFor(host, 'contenteditable', range),
+        text: 'already right',
+      },
+      'already right\n',
+    );
+
+    expect(outcome).toBe('unchanged');
+    expect(host.textContent).toBe('already right');
+    expect(document.execCommand).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Inserting into a caret is what puts the text beside the original, so a
+   * selection that will not restore has to stop the whole attempt.
+   */
+  it('refuses to insert when the selection cannot be restored', async () => {
+    stubExecCommand('insert');
+    const { host, range } = buildEditable('old');
+    range.collapse(true);
+
+    const outcome = await replaceSelectedText(
+      selectionFor(host, 'contenteditable', range),
+      'new',
+    );
+
+    expect(outcome).toBe('copied');
+    expect(host.textContent).toBe('old');
+    expect(document.execCommand).not.toHaveBeenCalled();
   });
 });
 
