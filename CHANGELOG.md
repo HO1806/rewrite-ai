@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — reported from real browser use
+
+- **The rewrite no longer lands beside the original in WhatsApp Web.** Reported as
+  "message 1. message 2", and reproduced offline against a real Lexical editor
+  mounted from npm. The cause was one omission: a script-constructed `InputEvent`
+  carries no target ranges, and Lexical, Slate and Quill all read the range to
+  replace from `getTargetRanges()` rather than from the DOM selection — so Lexical
+  declined the event, `execCommand` ran, and Lexical then re-applied the text at its
+  own cached caret. The offer now carries target ranges built from the captured
+  range, and Lexical takes the edit through its own pipeline. Confirmed against
+  `playground.lexical.dev` as well.
+- **The wrong element was being measured.** Every descendant of a `contenteditable`
+  reports `isContentEditable`, so resolving the "nearest editable" landed on the
+  inner `<span>` of Lexical's `<div><p><span>` shape — the wrong element to focus,
+  and the wrong text to compare, which made an append into a sibling node invisible.
+  The outermost editable element is now used.
+- **Verification no longer runs too early, or rejects a good rewrite.** Lexical
+  commits in a microtask and reverts foreign DOM from a `MutationObserver`, so the
+  check now waits a frame and a task. It compares by length arithmetic on
+  whitespace-stripped text, which an append fails and a legitimate Expand passes —
+  the previous test rejected every Expand, since an expansion contains its original.
+- **The model no longer answers the text instead of rewriting it.** The user turn
+  was the bare selection, which to a chat model *is* a message addressed to it. It
+  is now framed: the task named, the text inside a `<source_text>` delimiter, and the
+  rule restated after the content, where a causal-attention model actually weighs it.
+  The user turn stands alone, because Gemma has no system role and Mistral has no
+  system token — on Ollama the system prompt is glued into the user turn or dropped
+  outright, and `mistral` is a model this extension suggests. Built at the single
+  choke point in `streamHandler`, so all seven providers get it and none changed.
+- **New honest outcomes.** "No change needed" when the rewrite matches what you
+  wrote, and "Copied — check the field" when the page was altered but not verifiably
+  substituted, replacing a "Copied instead" that read as "your field was untouched".
+- **The default rewrite no longer pads.** A real message came back 43% longer, with a
+  terse arrow-notation instruction list turned into flowing prose — because the
+  `improve` objective asked to "enhance sentence flow, vocabulary, and readability",
+  which beat the system prompt's rule about matching length by being the more specific
+  instruction. Improve Writing now tightens rather than enriches, keeping every detail;
+  the system rules require the result to be no longer than the source and to preserve
+  shorthand as shorthand. Expand and the Long adjustment still override it.
+
+**Verified on WhatsApp Web itself**, by hand: the editor claimed the edit through
+`beforeinput` and the substitution verified. Still unverified: Ctrl+Z after a
+replacement, Quill sites (deliberately left on the previous code path), and whether the
+model's behaviour changed — that needs a real key, which CI does not have.
+
+- **A long suggestion no longer hides the buttons.** The card had no ceiling: only
+  its output area was capped, so a long rewrite grew the card from its ~220px
+  estimate to ~400px — 530px with Adjust open — and on a short viewport (a laptop
+  window, or any window at 125%+ zoom) the action bar ended up below the fold.
+  Because the card is `position: fixed`, nothing could scroll it back into view.
+  The card is now capped to the viewport with its header and action bar pinned and
+  the suggestion area scrolling, which is how Edge's panel behaves. Verified in
+  Chromium at 1280×380, with the drawer both closed and open: before the fix the
+  card's bottom sat 168px below the fold.
+- **The rewrite no longer lands beside the original in a rich editor.**
+  `execCommand('insertText')` dispatches no `beforeinput` — confirmed against
+  Chromium — and editors that build their document from that event (Lexical,
+  ProseMirror, Slate, as used by WhatsApp Web, Facebook and LinkedIn) therefore
+  never learned of the edit: they reverted it on the next reconcile, or left the
+  new text alongside the old. The edit is now offered to the editor through
+  `beforeinput` first, and if it takes ownership the insert is not repeated.
+- **The card can no longer claim "Replaced" for an edit that did not happen.** The
+  contenteditable path now verifies the outcome against the host's text and
+  reports `Copied instead` when the original survived — a substitution removes the
+  text it replaced, so previous content surviving intact means the rewrite was
+  added rather than substituted. It also refuses to insert at all when the
+  selection cannot be restored, since inserting into a caret is what puts the
+  rewrite beside the original.
+- **The captured range is a snapshot.** `getRangeAt(0)` returns the object the
+  selection itself holds, so moving that range's boundaries while inserting wrote
+  into the page's live selection.
+
 ### Changed — parity with Edge's "Rewrite with Copilot"
 
 The project always named Edge's Rewrite panel as its target, but the resemblance

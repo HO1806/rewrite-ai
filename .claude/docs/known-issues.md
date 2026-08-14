@@ -16,16 +16,53 @@ verified rather than assumed:
   text input, does **not** appear over read-only text, hides when the selection
   collapses, and opens the card when clicked.
 - A rewrite streams end to end through a stubbed local provider.
-- Replacement **substitutes rather than appends** in both a real `<textarea>` and
-  a real `<input>`.
+- Replacement **substitutes rather than appends** in a real `<textarea>`, a real
+  `<input>`, a plain `contenteditable`, a stand-in editor that owns its own
+  document, and — the one that matters — **a real Lexical editor**, mounted from
+  npm in `tests/e2e/fixtures.ts`. WhatsApp Web's composer is Lexical, and every
+  hand-written stand-in passed while the extension was still appending the rewrite
+  in the actual product. The test asserts against Lexical's own document, not just
+  the DOM, because the DOM can hold text Lexical is about to revert.
+- Also checked once by hand against **`playground.lexical.dev`**, a live Lexical
+  build: the editor claimed the edit via `beforeinput` and the substitution
+  verified. Not committed — it needs the network.
+- The card **reports honestly when it cannot substitute**: an editor that ignores
+  every hook gets "Copied — check the field" rather than a claimed success, and the
+  card stays open.
+- The card **stays within the viewport with its action bar clickable** at
+  1280×380, drawer open and closed. Before the cap its bottom sat 168px below the
+  fold, and being `position: fixed` it could not be scrolled to.
 - The popup and options pages render with their token stylesheet applied.
 - Context menus build with no errors, and the service worker registers cleanly.
 
 **Still unverified, and it needs a human with a real browser:**
 
-- **Real editors** — Gmail, Slack, Notion. Contenteditable replacement is where
-  the captured-range logic earns its keep, and the native undo stack after
-  `execCommand('insertText')` has never been checked.
+- **Re-verifying WhatsApp Web after a change here.** It cannot be reached from a
+  test — it needs a phone and a QR scan — so it was confirmed once, by hand, with
+  temporary tracing through the replacement path. That trace showed the host
+  identified as Lexical, the editor claiming the edit via `beforeinput`, and the
+  substitution verifying (142 = 142). **The tracing has been removed**; anyone
+  re-checking will need to add it back temporarily. Note that `pnpm verify` does not
+  fail on `console.log`, so a stray one will not be caught by the gate.
+- **Quill sites — Slack, LinkedIn.** Deliberately left on the old path: target
+  ranges are skipped when the host sits inside `.ql-editor`, because the change
+  could not be verified without accounts and the user does not use those sites. If
+  Quill renames that class the check stops matching and Quill falls through to the
+  general path, which is the better one anyway — a benign failure mode, and the only
+  reason sniffing for an editor is acceptable here.
+- **Gmail, Notion, Discord.** Gmail is a plain contenteditable and is covered by
+  proxy; the others are not covered at all.
+- The **native undo stack** after a replacement. `execCommand('insertText')` is
+  preferred precisely to preserve it, but Ctrl+Z has never been pressed after a
+  replacement in any of these editors — and the `beforeinput` path now hands the
+  edit to the editor's own history plugin instead, which changes what undo does.
+- **Whether the model actually stops answering, and now stays compact.** The prompt
+  frame and the compactness rules are verified as strings by golden tests, but no
+  real model runs in CI — there is no key, and a prompt is only really tested by a
+  model. Both need confirming on the user's own Groq or Ollama setup. The compactness
+  default came from one observed case (117 → 167 characters on a real message); if it
+  over-corrects, the first thing to relax is rule 4 in
+  `src/prompts/types.ts`, not the `improve` objective.
 - **Iframes** under `all_frames: true`. Context-menu clicks are frame-targeted;
   `Ctrl+Shift+D` is broadcast and relies on frames without a selection doing
   nothing.
@@ -86,6 +123,13 @@ Not bugs. Documented so nobody "fixes" them without knowing the reason.
   theme mid-session leaves the button stale until the page reloads. Subscribing
   would put a `chrome.storage` listener in every frame of every page for something
   purely cosmetic; the card, which opens rarely, re-resolves each time.
+- **A rewrite that lands beside the original is reported, not undone.** When the
+  outcome check finds the previous content still intact, the card says
+  `Copied instead` and leaves the page alone. Rolling back with
+  `execCommand('undo')` was considered and rejected: if the insert never made it
+  onto the editor's undo stack — the whole failure mode being that such editors do
+  not see our edits — one undo removes whatever the user did before instead, which
+  is worse than a visible duplicate they can delete.
 - **`Ctrl+Shift+D` overrides Chrome's own "save all tabs as bookmarks".** The
   extension command wins, and users can rebind at
   `chrome://extensions/shortcuts`. Chosen over Edge's `Alt+I` so the two do not
@@ -110,6 +154,13 @@ which has not been verified as the real remote.
 Coverage sits well above the enforced 80% floor.
 
 ## Smaller things
+
+- **The card is re-anchored one frame after it grows.** Its height changes as text
+  streams in; the ResizeObserver in `useAnchoredPosition` then re-measures and
+  repositions on the next animation frame, so for a single frame the new height is
+  paired with the old top. Harmless on screen, but a test that measures the card
+  once, immediately, can read a stale position — which is why the viewport test
+  polls rather than asserting on one sample.
 
 - **`prefers-reduced-motion`** is honoured via a media query in `tokens.css`, which
   zeroes durations globally. The spinner still spins, just instantly — a static
