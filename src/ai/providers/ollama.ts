@@ -28,7 +28,7 @@ export class OllamaProvider implements AIProvider {
   }
 
   async *rewrite(
-    text: string,
+    userContent: string,
     systemPrompt: string,
     options: RewriteOptions,
   ): AsyncGenerator<string, void, unknown> {
@@ -38,7 +38,7 @@ export class OllamaProvider implements AIProvider {
       payload: {
         model: this.model,
         system: systemPrompt,
-        prompt: text,
+        prompt: userContent,
         stream: options.stream,
         options: {
           temperature: options.temperature,

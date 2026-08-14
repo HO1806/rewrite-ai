@@ -34,7 +34,7 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async *rewrite(
-    text: string,
+    userContent: string,
     systemPrompt: string,
     options: RewriteOptions,
   ): AsyncGenerator<string, void, unknown> {
@@ -58,7 +58,7 @@ export class AnthropicProvider implements AIProvider {
       payload: {
         model: this.model,
         system: systemPrompt,
-        messages: [{ role: 'user', content: text }],
+        messages: [{ role: 'user', content: userContent }],
         max_tokens: options.maxTokens,
         temperature: options.temperature,
         stream: options.stream,

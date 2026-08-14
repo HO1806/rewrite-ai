@@ -19,7 +19,7 @@ import {
   abortErrorFor,
 } from '@/ai/types';
 import { buildProviderConfig, createProvider } from '@/ai/factory';
-import { getPromptForAction } from '@/prompts';
+import { assemblePrompt, sanitizeResult } from '@/prompts';
 import { Settings, loadSettings } from '@/storage/settings';
 import {
   REQUEST_TIMEOUT_MS,
@@ -103,12 +103,17 @@ class StreamSession {
   ): Promise<void> {
     const provider = createProvider(buildProviderConfig(settings));
 
-    const systemPrompt = getPromptForAction(request.action, {
+    /**
+     * The only place a prompt is built and the only caller of `provider.rewrite`,
+     * which is why framing the selection here reaches all seven providers without
+     * touching one of them.
+     */
+    const prompt = assemblePrompt(request.action, request.text, {
       language: settings.translateLanguage,
       ...request.adjustParams,
     });
 
-    const generator = provider.rewrite(request.text, systemPrompt, {
+    const generator = provider.rewrite(prompt.user, prompt.system, {
       temperature: settings.temperature,
       maxTokens: settings.maxTokens,
       stream: settings.stream,
@@ -126,16 +131,27 @@ class StreamSession {
 
     if (signal.aborted) throw abortErrorFor(signal);
 
+    /**
+     * Cleaned once, here at the boundary, so every consumer sees the same string:
+     * the card displays it, and `replace.ts` compares it against the captured
+     * selection to tell a real substitution from an append.
+     *
+     * CHUNKs stay raw — the card replaces its streamed text with `fullText` on
+     * DONE, so an echoed delimiter corrects itself rather than needing a
+     * stateful prefix guard mid-stream.
+     */
+    const cleaned = sanitizeResult(fullText, prompt);
+
     // An empty completion is a failure, not a success. Reporting DONE with an
     // empty string cleared the card's spinner and left a blank box behind.
-    if (!fullText.trim()) {
+    if (!cleaned.trim()) {
       throw new AIProviderError(
         'The model returned an empty response. Try again, or adjust the model settings.',
         'EMPTY_RESPONSE',
       );
     }
 
-    this.post({ type: 'DONE', fullText });
+    this.post({ type: 'DONE', fullText: cleaned });
   }
 
   /** Abort the in-flight request, if any. */

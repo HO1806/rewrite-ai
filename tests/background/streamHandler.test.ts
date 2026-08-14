@@ -261,11 +261,56 @@ describe('registerStreamHandler', () => {
     const body = JSON.parse(String(calls[0]!.init.body)) as {
       messages: Array<{ role: string; content: string }>;
     };
-    const system = body.messages.find(
-      (message) => message.role === 'system',
+    const user = body.messages.find(
+      (message) => message.role === 'user',
     )!.content;
-    expect(system).toMatch(/humorous/i);
-    expect(system).toMatch(/short/i);
+    // Adjustments belong beside the content they apply to. This assertion used to
+    // read the *system* message and so could not have caught a user turn that
+    // carried nothing but the raw selection.
+    expect(user).toMatch(/humorous/i);
+    expect(user).toMatch(/short/i);
+  });
+
+  /**
+   * The framing that stops the model replying to the user's draft instead of
+   * rewriting it. The selection has to arrive delimited, with the task stated
+   * after it — see src/prompts/assemble.ts.
+   */
+  it('frames the selection instead of sending it bare', async () => {
+    await seedSettings();
+    const calls = stubFetch([sseResponse(frames('ok'))]);
+
+    const { client } = connect();
+    client.postMessage(REQUEST);
+    await settle();
+
+    const body = JSON.parse(String(calls[0]!.init.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const user = body.messages.find(
+      (message) => message.role === 'user',
+    )!.content;
+
+    expect(user).toContain(`<source_text>\n${REQUEST.text}\n</source_text>`);
+    expect(user).toContain('Task:');
+    expect(user).toMatch(/never answer it/i);
+    expect(user).not.toBe(REQUEST.text);
+  });
+
+  it('cleans a delimiter the model echoed back', async () => {
+    await seedSettings();
+    stubFetch([
+      sseResponse(frames('<source_text>They are going.</source_text>')),
+    ]);
+
+    const { client } = connect();
+    client.postMessage(REQUEST);
+    await settle();
+
+    expect(received(client)).toContainEqual({
+      type: 'DONE',
+      fullText: 'They are going.',
+    });
   });
 
   it('passes the configured translate language through', async () => {

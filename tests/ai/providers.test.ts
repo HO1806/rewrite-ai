@@ -276,7 +276,14 @@ describe('AnthropicProvider', () => {
     expect(headerValue(call, 'anthropic-dangerous-direct-browser-access')).toBe(
       'true',
     );
-    expect(parseBody(call)).toMatchObject({ system: 'sys', model: 'claude-x' });
+    // The messages array was never inspected here, so a provider that dropped the
+    // user content entirely would have passed. Each provider carries it in a
+    // different field, which is why every one of them needs this assertion.
+    expect(parseBody(call)).toMatchObject({
+      system: 'sys',
+      model: 'claude-x',
+      messages: [{ role: 'user', content: 'draft' }],
+    });
   });
 
   it('ignores event types that carry no text', async () => {
@@ -334,6 +341,13 @@ describe('GeminiProvider', () => {
     expect(call.url).not.toContain('AIza-secret');
     expect(call.url).not.toContain('key=');
     expect(call.url).toContain(':streamGenerateContent?alt=sse');
+    // Gemini had no payload assertion whatsoever, so it could have sent an empty
+    // request and passed. Its two fields are named differently from every other
+    // provider's, which is precisely why it needs pinning.
+    expect(parseBody(call)).toMatchObject({
+      systemInstruction: { parts: [{ text: 'sys' }] },
+      contents: [{ role: 'user', parts: [{ text: 'draft' }] }],
+    });
   });
 
   it('percent-encodes the user-supplied model name', async () => {

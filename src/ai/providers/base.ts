@@ -98,7 +98,7 @@ export abstract class OpenAICompatibleProvider implements AIProvider {
   }
 
   async *rewrite(
-    text: string,
+    userContent: string,
     systemPrompt: string,
     options: RewriteOptions,
   ): AsyncGenerator<string, void, unknown> {
@@ -124,7 +124,7 @@ export abstract class OpenAICompatibleProvider implements AIProvider {
         model: this.model,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: text },
+          { role: 'user', content: userContent },
         ],
         temperature: options.temperature,
         max_tokens: options.maxTokens,

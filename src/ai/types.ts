@@ -60,8 +60,13 @@ export interface RewriteOptions {
  */
 export interface AIProvider {
   readonly name: string;
+  /**
+   * `userContent` is the fully-built user turn from `assemblePrompt`, not the raw
+   * selection: the selected text arrives wrapped in a delimiter and surrounded by
+   * the task. Providers pass it through untouched.
+   */
   rewrite(
-    text: string,
+    userContent: string,
     systemPrompt: string,
     options: RewriteOptions,
   ): AsyncGenerator<string, void, unknown>;

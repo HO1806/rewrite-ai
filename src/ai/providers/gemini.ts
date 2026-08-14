@@ -35,7 +35,7 @@ export class GeminiProvider implements AIProvider {
   }
 
   async *rewrite(
-    text: string,
+    userContent: string,
     systemPrompt: string,
     options: RewriteOptions,
   ): AsyncGenerator<string, void, unknown> {
@@ -63,7 +63,7 @@ export class GeminiProvider implements AIProvider {
       },
       payload: {
         systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: [{ text }] }],
+        contents: [{ role: 'user', parts: [{ text: userContent }] }],
         generationConfig: {
           temperature: options.temperature,
           maxOutputTokens: options.maxTokens,
