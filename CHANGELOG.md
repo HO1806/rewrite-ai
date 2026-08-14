@@ -48,9 +48,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shorthand as shorthand. Expand and the Long adjustment still override it.
 
 **Verified on WhatsApp Web itself**, by hand: the editor claimed the edit through
-`beforeinput` and the substitution verified. Still unverified: Ctrl+Z after a
-replacement, Quill sites (deliberately left on the previous code path), and whether the
-model's behaviour changed — that needs a real key, which CI does not have.
+`beforeinput` and the substitution verified.
+
+### Added
+
+- **`pnpm eval` — prompt behaviour against a real model.** Opt-in and outside the gate:
+  it skips without `GROQ_API_KEY`, lives outside `vite.config.ts`'s `include`, and adds
+  nothing to `pnpm test` or the coverage threshold. Thirteen property-based cases over the
+  shipped path, all passing on `llama-3.3-70b-versatile` — a question stays a question, an
+  instruction keeps its digits, arrow shorthand stays shorthand, an instruction embedded in
+  the selection is rewritten rather than obeyed, and Expand and Concise still change length
+  in the directions they exist for. This is what turns the prompt claims from asserted
+  strings into measured behaviour.
+
+Still unverified: Ctrl+Z after a replacement, Quill sites (deliberately left on the
+previous code path), Ollama, and Groq's smaller `llama-3.1-8b-instant`.
 
 - **A long suggestion no longer hides the buttons.** The card had no ceiling: only
   its output area was capped, so a long rewrite grew the card from its ~220px

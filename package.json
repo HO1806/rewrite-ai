@@ -25,7 +25,8 @@
     "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build",
     "sync-version": "node scripts/sync-version.mjs",
     "check-version": "node scripts/sync-version.mjs --check",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "eval": "vitest run --config vite.config.eval.ts --reporter verbose"
   },
   "dependencies": {
     "react": "^18.3.1",
