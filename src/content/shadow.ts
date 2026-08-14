@@ -11,6 +11,7 @@
 import tokensCss from '@/styles/tokens.css?inline';
 import cardCss from '@/styles/card.css?inline';
 import triggerCss from '@/styles/trigger.css?inline';
+import { CARD } from '@/shared/constants';
 
 const MOUNT_ID = 'rewrite-ai-mount';
 
@@ -79,6 +80,14 @@ function createStyleSheet(): HTMLStyleElement {
     :host {
       all: initial;
       font-family: var(--font-sans);
+      /*
+       * The ceiling card.css caps the card against, derived here so the edge
+       * margin keeps a single definition in CARD rather than being restated as a
+       * literal in the stylesheet. 100vh is the containing frame's viewport,
+       * which is the right reference for a position: fixed card under
+       * all_frames.
+       */
+      --card-max-height: calc(100vh - ${CARD.margin * 2}px);
     }
     ${tokensCss}
     ${cardCss}

@@ -10,6 +10,20 @@
   box-sizing: border-box;
   width: 460px;
   max-width: calc(100vw - 2 * var(--space-4));
+  /*
+   * Never outgrow the viewport.
+   *
+   * `--card-max-height` is derived from CARD.margin and injected into the shadow
+   * root by createShadowContainer, so the number lives in one place. Without a
+   * cap the card grew from its ~220px estimate to ~400px as a long suggestion
+   * streamed in — 550px with the drawer open — and since it is `position: fixed`
+   * the overhanging action bar could not be scrolled into view by anything. It
+   * was simply gone. This also makes the viewport clamp in positionAnchored
+   * truthful: the card can no longer measure taller than the space it is being
+   * fitted into.
+   */
+  max-height: var(--card-max-height);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   padding: var(--space-6) var(--space-7);
@@ -30,7 +44,9 @@
 
 /* ── Header ── */
 
+/* Pinned: the title and the close button stay put however tall the output is. */
 .card__header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -69,8 +85,16 @@
 
 /* ── Output ── */
 
+/*
+ * The part that gives way. When the card is capped, the suggestion area shrinks
+ * and scrolls rather than pushing the action bar off the bottom of the screen —
+ * which is how Edge's panel behaves. An explicit `min-height` is what allows
+ * that at all: a flex item defaults to `min-height: auto` and refuses to shrink
+ * below its content. The value is the floor, keeping a usable window of text.
+ */
 .card__output {
-  min-height: 80px;
+  flex: 1 1 auto;
+  min-height: 3rem;
   max-height: 260px;
   overflow-y: auto;
   padding: var(--space-5) var(--space-6);
@@ -106,9 +130,13 @@
 
 /* ── Adjust drawer ── */
 
+/* Also shrinkable: a short viewport scrolls the pills instead of losing the
+   action bar. It opens on demand, so it gives way after the output does. */
 .card__drawer {
+  flex: 0 1 auto;
+  min-height: 0;
   margin-top: var(--space-4);
-  overflow: hidden;
+  overflow-y: auto;
   background-color: var(--surface-raised);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
@@ -198,7 +226,10 @@
 
 /* ── Action bar ── */
 
+/* Pinned, like the header. Replace being reachable is the whole point of the
+   card, so it is the last thing that may ever be given up. */
 .card__actions {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
