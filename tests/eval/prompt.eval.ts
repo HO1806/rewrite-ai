@@ -33,7 +33,7 @@ import { collect } from '../helpers/http';
 
 const apiKey = process.env.GROQ_API_KEY;
 /** The user's own model. Override to check the weaker 8B with one flag. */
-const model = process.env.GROQ_EVAL_MODEL ?? 'llama-3.3-70b-versatile';
+const model = process.env.GROQ_EVAL_MODEL ?? 'openai/gpt-oss-120b';
 
 /** Groq's free tier is rate limited; keep the calls polite and sequential. */
 const DELAY_MS = 1_000;

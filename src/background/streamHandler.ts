@@ -204,9 +204,35 @@ export function toUserMessage(err: unknown): string | null {
     case 'OFFLINE':
     case 'EMPTY_RESPONSE':
     case 'STREAM_ERROR':
-    case 'PROVIDER_ERROR':
       return err.message;
+    case 'PROVIDER_ERROR':
+      /**
+       * A retired model is the one provider error a user can fix themselves, and
+       * the provider's own wording ("does not exist or you do not have access")
+       * does not say how. Providers retire models on their own schedule — Groq
+       * killed two of this extension's defaults with two months' notice — so this
+       * points at the button that lists what the key can actually use.
+       */
+      return isModelUnavailable(err)
+        ? `${err.message} Open the extension options and choose another model — "Load models" lists the ones your key can use.`
+        : err.message;
     default:
       return err.message;
   }
+}
+
+/**
+ * A model this key cannot use, as opposed to a wrong key (401), a dead host, or
+ * a model that exists but is busy.
+ *
+ * Status first: every provider here answers 404 for an unknown model. The text
+ * backstop deliberately matches not-found wording rather than the word "model" —
+ * that looser check told a user facing "model overloaded", a capacity error, to
+ * go and pick a different model, which an existing test caught.
+ */
+function isModelUnavailable(err: AIProviderError): boolean {
+  if (err.statusCode === 404) return true;
+
+  const message = err.message.toLowerCase();
+  return message.includes('does not exist') || message.includes('not found');
 }

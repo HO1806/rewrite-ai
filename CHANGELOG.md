@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — the model list going stale
+
+- **Models are now read from the provider.** Groq retired
+  `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` — announced 17 June 2026 for
+  a 16 August shutdown, with access cut on the 14th — so the extension's default
+  returned `404: The model does not exist or you do not have access to it`
+  mid-rewrite. Every hardcoded list had rotted the same way: Gemini 1.5, Claude 3.5
+  from 2024, GPT-4o. **Load models** in the options page now asks the provider what
+  the key can actually use, for all seven providers, with the bundled list as an
+  offline fallback. Ollama gains the most: it lists what is genuinely pulled on the
+  machine, which no bundled list could ever know.
+- **Presets refreshed** and verified against each provider's live catalogue:
+  `openai/gpt-oss-120b` for Groq, `gpt-5.6-terra` for OpenAI, `gemini-3.7-flash`,
+  `claude-sonnet-5`. Preview-tier models are excluded on purpose — Groq's other
+  suggested replacement is documented as removable at short notice, which is the
+  failure being fixed.
+- **A retired model now says what to do**, rather than only that it does not exist.
+- **The Chrome test double honours `return true`.** It resolved `undefined` on the
+  next microtask regardless, so any handler awaiting something real lost the race
+  and its reply was discarded — the theme bridge passed only because a storage read
+  settled one microtask sooner than a fetch does.
+
 ### Fixed — reported from real browser use
 
 - **The rewrite no longer lands beside the original in WhatsApp Web.** Reported as

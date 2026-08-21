@@ -12,7 +12,7 @@ import {
   parseSSEStream,
   readJsonBody,
 } from '../stream';
-import { digString } from '../json';
+import { collectModelIds, digString } from '../json';
 import { requestJson } from './base';
 
 export const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
@@ -31,6 +31,34 @@ export class AnthropicProvider implements AIProvider {
   constructor(config: ConfigFor<'anthropic'>) {
     this.apiKey = config.apiKey;
     this.model = config.model;
+  }
+
+  async listModels(signal?: AbortSignal): Promise<string[]> {
+    if (!this.apiKey) {
+      throw new AIProviderError(
+        'Anthropic API key is required.',
+        'INVALID_API_KEY',
+      );
+    }
+
+    const response = await requestJson({
+      endpoint: `${ANTHROPIC_BASE_URL}/models`,
+      headers: {
+        'x-api-key': this.apiKey,
+        'anthropic-version': '2023-06-01',
+        // Required for a browser-origin request, exactly as in `rewrite`.
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      method: 'GET',
+      signal,
+    });
+    await assertResponseOk(response, this.name);
+
+    return collectModelIds(
+      await readJsonBody(response, this.name),
+      'data',
+      'id',
+    );
   }
 
   async *rewrite(

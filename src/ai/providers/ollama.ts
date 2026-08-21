@@ -6,7 +6,7 @@ import {
   parseNDJSONStream,
   readJsonBody,
 } from '../stream';
-import { digString } from '../json';
+import { collectModelIds, digString } from '../json';
 import { normalizeBaseUrl, requestJson } from './base';
 
 export const OLLAMA_BASE_URL = 'http://localhost:11434';
@@ -25,6 +25,29 @@ export class OllamaProvider implements AIProvider {
   constructor(config: ConfigFor<'ollama'>) {
     this.model = config.model;
     this.baseUrl = config.baseUrl;
+  }
+
+  /**
+   * `GET /api/tags` — what is actually pulled on this machine.
+   *
+   * The most valuable of the four: a hardcoded list cannot know which models a
+   * user has downloaded, so it was guaranteed to be wrong for everyone.
+   */
+  async listModels(signal?: AbortSignal): Promise<string[]> {
+    const response = await requestJson({
+      endpoint: `${normalizeBaseUrl(this.baseUrl)}/api/tags`,
+      headers: {},
+      method: 'GET',
+      signal,
+      offlineMessage: 'Could not reach Ollama. Is it running?',
+    });
+    await assertResponseOk(response, this.name);
+
+    return collectModelIds(
+      await readJsonBody(response, this.name),
+      'models',
+      'name',
+    );
   }
 
   async *rewrite(

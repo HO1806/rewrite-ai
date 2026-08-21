@@ -215,13 +215,27 @@ export function installChromeMock(): ChromeMock {
             resolve(value);
           };
 
+          let claimedAsync = false;
           for (const listener of [...state.listeners.message]) {
-            // A listener returning true will reply asynchronously.
-            listener(message, { id: 'mock-id' }, respond);
+            // Chrome's contract: returning true means "I will respond later".
+            if (listener(message, { id: 'mock-id' }, respond) === true) {
+              claimedAsync = true;
+            }
           }
 
-          // Nothing claimed it; Chrome resolves undefined.
-          if (!answered) queueMicrotask(() => respond(undefined));
+          /**
+           * Only resolve undefined when nobody claimed the message.
+           *
+           * This used to fire on the next microtask regardless, which quietly
+           * beat any handler that awaited something real: a bridge doing a fetch
+           * always lost the race and its reply was discarded, so the test saw
+           * `undefined` from a handler that had worked perfectly. The theme
+           * bridge only passed because its storage read happened to settle one
+           * microtask sooner.
+           */
+          if (!answered && !claimedAsync) {
+            queueMicrotask(() => respond(undefined));
+          }
         });
       }),
       connect: vi.fn(({ name }: { name: string }) => {

@@ -70,6 +70,15 @@ export interface AIProvider {
     systemPrompt: string,
     options: RewriteOptions,
   ): AsyncGenerator<string, void, unknown>;
+  /**
+   * The models this key may actually use, straight from the provider.
+   *
+   * Hardcoding model ids does not work: `PROVIDERS` in shared/constants.ts held
+   * two Groq models that were retired two months after being announced, and the
+   * first the user knew of it was a 404 mid-rewrite. Every provider publishes a
+   * catalogue endpoint, so the extension asks instead of assuming.
+   */
+  listModels(signal?: AbortSignal): Promise<string[]>;
 }
 
 export type AIProviderErrorCode =

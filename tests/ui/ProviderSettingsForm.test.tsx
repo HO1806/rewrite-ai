@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { ProviderSettingsForm } from '@/ui/ProviderSettingsForm';
 import { DEFAULT_SETTINGS, PROVIDERS, getProvider } from '@/shared/constants';
 import { settingsSchema, type Settings } from '@/storage/settings';
+import { registerModelsBridge } from '@/background/modelsBridge';
+import { jsonResponse, stubFetch } from '../helpers/http';
 
 function settings(overrides: Partial<Settings> = {}): Settings {
   return settingsSchema.parse({ ...DEFAULT_SETTINGS, ...overrides });
@@ -251,5 +253,83 @@ describe('ProviderSettingsForm', () => {
       );
       expect(onChange).toHaveBeenCalledWith({ theme: 'dark' });
     });
+  });
+});
+
+/**
+ * The model list, fetched from the provider.
+ *
+ * The bundled presets are a dated assertion — Groq retired both of this
+ * extension's ids two months after announcing them, and the user met it as a 404
+ * mid-rewrite. These drive the real bridge over the mocked message boundary
+ * against a stubbed fetch, so the button is tested end to end rather than the
+ * seam being mocked away.
+ */
+describe('ProviderSettingsForm loading models from the provider', () => {
+  it('offers the bundled presets before anything is fetched', () => {
+    render(<ProviderSettingsForm settings={settings()} onChange={vi.fn()} />);
+
+    for (const model of getProvider(DEFAULT_SETTINGS.provider).models) {
+      expect(screen.getByRole('button', { name: model })).toBeInTheDocument();
+    }
+  });
+
+  it('replaces the presets with the provider catalogue', async () => {
+    registerModelsBridge();
+    stubFetch([
+      jsonResponse({ data: [{ id: 'fetched-a' }, { id: 'fetched-b' }] }),
+    ]);
+    render(<ProviderSettingsForm settings={settings()} onChange={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load models/ }));
+
+    expect(
+      await screen.findByRole('button', { name: 'fetched-a' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'fetched-b' }),
+    ).toBeInTheDocument();
+    // The stale guess must be gone, not merged with the truth.
+    const [firstPreset] = getProvider(DEFAULT_SETTINGS.provider).models;
+    expect(
+      screen.queryByRole('button', { name: firstPreset }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('selects a fetched model when clicked', async () => {
+    registerModelsBridge();
+    stubFetch([jsonResponse({ data: [{ id: 'fetched-a' }] })]);
+    const onChange = vi.fn();
+    render(<ProviderSettingsForm settings={settings()} onChange={onChange} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load models/ }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'fetched-a' }),
+    );
+
+    expect(onChange).toHaveBeenCalledWith({ model: 'fetched-a' });
+  });
+
+  /** A failure the user cannot see is worse than the stale list they had. */
+  it('shows why the catalogue could not be loaded', async () => {
+    registerModelsBridge();
+    stubFetch([jsonResponse({ error: 'nope' }, { status: 401 })]);
+    render(<ProviderSettingsForm settings={settings()} onChange={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load models/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /Invalid API key/,
+    );
+  });
+
+  it('says so when the provider returns an empty catalogue', async () => {
+    registerModelsBridge();
+    stubFetch([jsonResponse({ data: [] })]);
+    render(<ProviderSettingsForm settings={settings()} onChange={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Load models/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no models/i);
   });
 });

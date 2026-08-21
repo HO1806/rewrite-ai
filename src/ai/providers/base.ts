@@ -22,7 +22,7 @@ import {
   readJsonBody,
   throwIfAborted,
 } from '../stream';
-import { digString } from '../json';
+import { collectModelIds, digString } from '../json';
 import { getErrorMessage, isAbortError } from '@/shared/errors';
 
 /** Strip trailing slashes so endpoint concatenation cannot produce a double slash. */
@@ -39,19 +39,23 @@ export function normalizeBaseUrl(baseUrl: string): string {
 export async function requestJson(options: {
   endpoint: string;
   headers: Record<string, string>;
-  payload: unknown;
+  /** Omitted for GET, which carries no body. */
+  payload?: unknown;
+  method?: 'GET' | 'POST';
   signal?: AbortSignal;
   offlineMessage?: string;
 }): Promise<Response> {
   const { endpoint, headers, payload, signal, offlineMessage } = options;
+  const method = options.method ?? 'POST';
 
   throwIfAborted(signal);
 
   try {
     return await fetch(endpoint, {
-      method: 'POST',
+      method,
       headers,
-      body: JSON.stringify(payload),
+      // A GET with a body is rejected outright by fetch.
+      body: method === 'GET' ? undefined : JSON.stringify(payload),
       signal,
     });
   } catch (err: unknown) {
@@ -95,6 +99,31 @@ export abstract class OpenAICompatibleProvider implements AIProvider {
   /** Whether a request may proceed without an API key (local servers may). */
   protected requiresApiKey(): boolean {
     return true;
+  }
+
+  /**
+   * `GET {baseUrl}/models`, the OpenAI dialect's catalogue.
+   *
+   * One implementation covers OpenAI, Groq, OpenRouter and any custom
+   * OpenAI-compatible server, exactly as `rewrite` does.
+   */
+  async listModels(signal?: AbortSignal): Promise<string[]> {
+    const headers: Record<string, string> = { ...this.extraHeaders() };
+    if (this.apiKey) headers['Authorization'] = `Bearer ${this.apiKey}`;
+
+    const response = await requestJson({
+      endpoint: `${normalizeBaseUrl(this.baseUrl)}/models`,
+      headers,
+      method: 'GET',
+      signal,
+    });
+    await assertResponseOk(response, this.name);
+
+    return collectModelIds(
+      await readJsonBody(response, this.name),
+      'data',
+      'id',
+    );
   }
 
   async *rewrite(

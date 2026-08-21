@@ -156,13 +156,28 @@ export interface ProviderDescriptor {
   readonly apiKeyUrl?: string;
 }
 
+/**
+ * Providers, and a starting set of models for each.
+ *
+ * **A model id is a dated assertion, not a constant.** Every list here was
+ * accurate once and went stale: Groq retired both of its entries two months after
+ * announcing them, and an id that no longer exists becomes a 404 the moment a user
+ * switches provider, because `models[0]` is also the default. The provider itself
+ * is the source of truth — the options page can ask it what this key may actually
+ * use — and these are the offline fallback and the first-run default.
+ *
+ * Preview-tier models are deliberately excluded: they are documented as removable
+ * at short notice, which is the failure this list exists to survive.
+ *
+ * Verified against each provider's live catalogue on 14 August 2026.
+ */
 export const PROVIDERS: readonly ProviderDescriptor[] = [
   {
     value: 'openai',
     label: 'OpenAI',
     needsApiKey: true,
     needsBaseUrl: false,
-    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini'],
+    models: ['gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.6-sol'],
     apiKeyUrl: 'https://platform.openai.com/api-keys',
   },
   {
@@ -170,7 +185,7 @@ export const PROVIDERS: readonly ProviderDescriptor[] = [
     label: 'Groq (ultra fast)',
     needsApiKey: true,
     needsBaseUrl: false,
-    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+    models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
     apiKeyUrl: 'https://console.groq.com/keys',
   },
   {
@@ -178,7 +193,7 @@ export const PROVIDERS: readonly ProviderDescriptor[] = [
     label: 'Google Gemini',
     needsApiKey: true,
     needsBaseUrl: false,
-    models: ['gemini-1.5-flash', 'gemini-1.5-pro'],
+    models: ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'],
     apiKeyUrl: 'https://aistudio.google.com/apikey',
   },
   {
@@ -186,7 +201,7 @@ export const PROVIDERS: readonly ProviderDescriptor[] = [
     label: 'Anthropic Claude',
     needsApiKey: true,
     needsBaseUrl: false,
-    models: ['claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022'],
+    models: ['claude-sonnet-5', 'claude-haiku-4-5-20251001'],
     apiKeyUrl: 'https://console.anthropic.com/settings/keys',
   },
   {
@@ -194,10 +209,7 @@ export const PROVIDERS: readonly ProviderDescriptor[] = [
     label: 'OpenRouter',
     needsApiKey: true,
     needsBaseUrl: false,
-    models: [
-      'meta-llama/llama-3.1-8b-instruct:free',
-      'anthropic/claude-3.5-haiku',
-    ],
+    models: ['openai/gpt-oss-120b', 'anthropic/claude-haiku-4.5'],
     apiKeyUrl: 'https://openrouter.ai/keys',
   },
   {
@@ -213,7 +225,7 @@ export const PROVIDERS: readonly ProviderDescriptor[] = [
     label: 'Custom OpenAI-compatible server',
     needsApiKey: false,
     needsBaseUrl: true,
-    models: ['gpt-4o-mini'],
+    models: ['openai/gpt-oss-20b'],
   },
 ];
 
@@ -283,7 +295,7 @@ export const LENGTH_OPTIONS: readonly AdjustOption<LengthOption>[] = [
 export const DEFAULT_SETTINGS = {
   provider: 'openai',
   apiKey: '',
-  model: 'gpt-4o-mini',
+  model: 'gpt-5.6-terra',
   temperature: 0.3,
   maxTokens: 2048,
   stream: true,

@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 import { MAX_INPUT_LENGTH } from '@/shared/constants';
+import { settingsSchema } from '@/storage/settings';
 import type {
   AdjustParams,
   BackgroundToContentMessage,
@@ -85,6 +86,37 @@ export const themeRequestSchema = z.object({
 export const themeResponseSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']),
 });
+
+/**
+ * options/popup → background: what models does this key actually have?
+ *
+ * Carries the credentials *being edited* rather than reading stored settings, so
+ * the button works before a save. That is safe here in a way it would not be
+ * from a content script: both ends are extension surfaces, and the options page
+ * already holds the key in its own form. A content script shares a process with
+ * the page, which is why it gets `GET_THEME` and nothing more.
+ *
+ * The fields are picked from `settingsSchema` rather than redeclared, so the
+ * base URL keeps the refinement that makes it safe to fetch: this message
+ * directs a request that carries the user's API key, and an unvalidated URL
+ * would reopen exactly the exfiltration path that refinement exists to close.
+ */
+export const listModelsRequestSchema = z.object({
+  type: z.literal('LIST_MODELS'),
+  settings: settingsSchema.pick({
+    provider: true,
+    apiKey: true,
+    model: true,
+    baseUrl: true,
+  }),
+});
+
+export const listModelsResponseSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), models: z.array(z.string()) }),
+  z.object({ ok: z.literal(false), message: z.string() }),
+]);
+
+export type ListModelsResponse = z.infer<typeof listModelsResponseSchema>;
 
 /** background → content, over the streaming port */
 export const streamMessageSchema = z.discriminatedUnion('type', [

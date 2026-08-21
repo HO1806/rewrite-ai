@@ -9,12 +9,14 @@ import { ACTIONS } from '@/shared/constants';
 import type { BackgroundToContentMessage, RewriteAction } from '@/shared/types';
 import { registerContextMenus } from './contextMenus';
 import { registerStreamHandler } from './streamHandler';
+import { registerModelsBridge } from './modelsBridge';
 import { registerThemeBridge } from './themeBridge';
 import { SendOptions, describeDeliveryFailure, sendMessageToTab } from './tabs';
 
 registerContextMenus();
 registerStreamHandler();
 registerThemeBridge();
+registerModelsBridge();
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab?.id || !info.selectionText) return;

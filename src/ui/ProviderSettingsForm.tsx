@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { PROVIDERS, getProvider } from '@/shared/constants';
 import type { ProviderType } from '@/shared/types';
 import { Settings, isAllowedBaseUrl } from '@/storage/settings';
+import { useProviderModels } from './hooks/useProviderModels';
 
 interface ProviderSettingsFormProps {
   settings: Settings;
@@ -29,6 +30,10 @@ export function ProviderSettingsForm({
 }: ProviderSettingsFormProps) {
   const [isKeyVisible, setIsKeyVisible] = useState(false);
   const descriptor = getProvider(settings.provider);
+  const { models, isLoading, error, load } = useProviderModels(settings);
+  // The provider's own catalogue when we have it; the bundled list is only ever
+  // a guess about a world that changes without telling us.
+  const offered = models ?? descriptor.models;
   const isBaseUrlValid = isAllowedBaseUrl(settings.baseUrl);
 
   /**
@@ -148,7 +153,7 @@ export function ProviderSettingsForm({
           onChange={(event) => onChange({ model: event.target.value })}
         />
         <div className="chips">
-          {descriptor.models.map((model) => (
+          {offered.map((model) => (
             <button
               type="button"
               key={model}
@@ -160,6 +165,26 @@ export function ProviderSettingsForm({
             </button>
           ))}
         </div>
+        <div className="row">
+          <button
+            type="button"
+            className="button button--subtle"
+            onClick={load}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Loading models…' : 'Load models'}
+          </button>
+          <span className="field__hint">
+            {models
+              ? `${models.length} from ${descriptor.label}`
+              : 'Ask the provider what this key can use'}
+          </span>
+        </div>
+        {error && (
+          <span className="field__error" role="alert">
+            {error}
+          </span>
+        )}
       </div>
 
       <div className="field">

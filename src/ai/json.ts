@@ -50,3 +50,34 @@ export function safeJsonParse(raw: string): unknown {
     return undefined;
   }
 }
+
+/**
+ * Pull a list of model ids out of a catalogue response.
+ *
+ * Every provider returns the same idea in a different envelope — `data[].id`,
+ * `models[].name` — so the shape is passed in and the defensive work is shared:
+ * a catalogue is an untrusted boundary like any other provider response, and a
+ * malformed one must yield an empty list rather than `[undefined]`.
+ *
+ * Entries are de-duplicated and sorted, because a raw catalogue arrives in the
+ * provider's own order, which is rarely useful and never stable.
+ */
+export function collectModelIds(
+  body: unknown,
+  listKey: string,
+  idKey: string,
+  transform: (id: string) => string | null = (id) => id,
+): string[] {
+  const list = dig(body, listKey);
+  if (!Array.isArray(list)) return [];
+
+  const ids = new Set<string>();
+  for (const entry of list) {
+    const raw = digString(entry, idKey);
+    if (!raw) continue;
+    const id = transform(raw);
+    if (id) ids.add(id);
+  }
+
+  return [...ids].sort();
+}

@@ -11,7 +11,7 @@ import {
   parseSSEStream,
   readJsonBody,
 } from '../stream';
-import { digString } from '../json';
+import { dig, digString } from '../json';
 import { requestJson } from './base';
 
 export const GEMINI_BASE_URL =
@@ -32,6 +32,46 @@ export class GeminiProvider implements AIProvider {
   constructor(config: ConfigFor<'gemini'>) {
     this.apiKey = config.apiKey;
     this.model = config.model;
+  }
+
+  /**
+   * Gemini's catalogue needs two corrections the others do not.
+   *
+   * Entries are named `models/gemini-…`, and the id the API expects has no
+   * prefix. The list also carries embedding, ranking and tuning models a rewrite
+   * cannot use, so it is filtered by the capability each entry declares rather
+   * than by guessing from the name.
+   */
+  async listModels(signal?: AbortSignal): Promise<string[]> {
+    if (!this.apiKey) {
+      throw new AIProviderError(
+        'Gemini API key is required.',
+        'INVALID_API_KEY',
+      );
+    }
+
+    const response = await requestJson({
+      endpoint: `${GEMINI_BASE_URL}/models?pageSize=200`,
+      headers: { 'x-goog-api-key': this.apiKey },
+      method: 'GET',
+      signal,
+    });
+    await assertResponseOk(response, this.name);
+
+    const entries = dig(await readJsonBody(response, this.name), 'models');
+    if (!Array.isArray(entries)) return [];
+
+    const ids = new Set<string>();
+    for (const entry of entries) {
+      const name = digString(entry, 'name');
+      const methods = dig(entry, 'supportedGenerationMethods');
+      if (!name || !Array.isArray(methods)) continue;
+      if (!methods.includes('generateContent')) continue;
+
+      ids.add(name.startsWith('models/') ? name.slice('models/'.length) : name);
+    }
+
+    return [...ids].sort();
   }
 
   async *rewrite(

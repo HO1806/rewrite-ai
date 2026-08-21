@@ -50,7 +50,7 @@ describe('buildProviderConfig', () => {
     expect(config).toEqual({
       provider: 'groq',
       apiKey: '',
-      model: 'gpt-4o-mini',
+      model: DEFAULT_SETTINGS.model,
     });
   });
 
@@ -104,7 +104,7 @@ describe('buildProviderConfig', () => {
     );
     expect(config).toEqual({
       provider: 'ollama',
-      model: 'gpt-4o-mini',
+      model: DEFAULT_SETTINGS.model,
       baseUrl: 'http://localhost:11434',
     });
     expect(config).not.toHaveProperty('apiKey');

@@ -135,6 +135,27 @@ extension at 1280×800 — see `/build-extension` — dropped into
 The 1400×560 marquee tile is also unbuilt. It is optional, and no source is close
 to 2.5∶1, so it wants purpose-built artwork rather than a 37% vertical crop.
 
+## Model ids rot, and the fallback list will too
+
+`PROVIDERS[].models` was refreshed on 14 August 2026 against each provider's live
+catalogue, and it starts going stale the same day. Groq gave two months' notice on its
+two entries and then cut access two days early; that is the normal rate, not an
+outlier.
+
+The durable answer is **Load models** in the options page, which asks the provider.
+What it does not cover:
+
+- **The user's stored model is not migrated.** Nothing silently rewrites a model
+  someone chose, so an existing install keeps pointing at a retired id until its owner
+  picks another. The 404 now names the fix; that is the whole remedy.
+- **The catalogue is unfiltered** beyond Gemini's capability check. OpenAI's list
+  includes embedding and audio models a rewrite cannot use, so the chips can offer
+  something that will fail. Filtering by capability is possible for Gemini because it
+  declares one; the OpenAI dialect does not.
+- **Preview-tier models are excluded from the fallback by hand.** There is no
+  programmatic signal for it, so this is a judgement that has to be re-made whenever
+  the list is refreshed.
+
 ## Accepted tradeoffs
 
 Not bugs. Documented so nobody "fixes" them without knowing the reason.
