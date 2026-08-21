@@ -1,28 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App as PopupApp } from '@/popup/App';
 import { App as OptionsApp } from '@/options/App';
-import { registerStreamHandler } from '@/background/streamHandler';
 import { DEFAULT_SETTINGS, STORAGE_KEYS } from '@/shared/constants';
 import { loadSettings, saveSettings, settingsSchema } from '@/storage/settings';
 import { chromeMock } from '../setup';
-import { sseResponse, stubFetchEach } from '../helpers/http';
 
 afterEach(cleanup);
-
-function frames(text: string): string[] {
-  return [
-    `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}`,
-    'data: [DONE]',
-  ];
-}
 
 async function seed(overrides: Record<string, unknown> = {}): Promise<void> {
   await saveSettings(
@@ -35,88 +20,63 @@ async function seed(overrides: Record<string, unknown> = {}): Promise<void> {
 }
 
 describe('popup', () => {
-  it('presents its sections as an accessible tablist', async () => {
+  /**
+   * One panel, no tabs. Playground went because "Load models" proves a key works
+   * more directly, and Info because the shortcut it displayed belongs beside the
+   * settings it applies to.
+   */
+  it('presents a single settings panel with no tablist', async () => {
     await seed();
     render(<PopupApp />);
 
-    const tablist = await screen.findByRole('tablist', {
-      name: /Popup sections/i,
-    });
-    expect(within(tablist).getAllByRole('tab')).toHaveLength(3);
+    expect(await screen.findByLabelText('Model')).toBeInTheDocument();
+    expect(screen.queryByRole('tablist')).toBeNull();
   });
 
-  it('switches tab with the arrow keys', async () => {
+  it('still shows the shortcut it used to hide in an Info tab', async () => {
     await seed();
     render(<PopupApp />);
 
-    const tablist = await screen.findByRole('tablist', {
-      name: /Popup sections/i,
-    });
-    await userEvent.click(within(tablist).getByRole('tab', { name: /Setup/ }));
-    await userEvent.keyboard('{ArrowRight}');
-
-    expect(
-      within(tablist).getByRole('tab', { name: /Playground/ }),
-    ).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByText(/shortcut/i)).toBeInTheDocument();
   });
 
   it('persists an edit immediately and confirms it', async () => {
     await seed();
     render(<PopupApp />);
 
+    // The model is a dropdown now; picking from it is the edit.
     const model = await screen.findByLabelText(/^Model$/i);
-    await userEvent.clear(model);
-    await userEvent.type(model, 'gpt-4o');
+    await userEvent.selectOptions(model, 'gpt-5.6-luna');
 
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent('Saved'),
     );
-    await expect(loadSettings()).resolves.toMatchObject({ model: 'gpt-4o' });
+    await expect(loadSettings()).resolves.toMatchObject({
+      model: 'gpt-5.6-luna',
+    });
   });
 
   it('reports a save failure instead of failing silently', async () => {
     await seed();
     render(<PopupApp />);
 
-    // An empty model violates the schema, so the save must reject.
-    const model = await screen.findByLabelText(/^Model$/i);
-    await userEvent.clear(model);
+    // An empty model violates the schema, so the save must reject. Reaching that
+    // state needs the typed-id escape hatch, since a dropdown cannot be emptied.
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Type an id/ }),
+    );
+    await userEvent.clear(await screen.findByLabelText(/^Model$/i));
 
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(/model/i),
     );
   });
 
-  it('shows the configured provider and key status in the info tab', async () => {
-    await seed({ provider: 'groq' });
-    render(<PopupApp />);
-
-    await userEvent.click(await screen.findByRole('tab', { name: /Info/ }));
-
-    const panel = within(screen.getByRole('tabpanel'));
-    expect(panel.getByText('Groq (ultra fast)')).toBeInTheDocument();
-    expect(panel.getByText('Configured')).toBeInTheDocument();
-  });
-
-  it('reports a missing key in the info tab', async () => {
-    await seed({ apiKey: '' });
-    render(<PopupApp />);
-
-    await userEvent.click(await screen.findByRole('tab', { name: /Info/ }));
-    expect(
-      within(screen.getByRole('tabpanel')).getByText('Not set'),
-    ).toBeInTheDocument();
-  });
-
   it('reads the real keyboard shortcut from the browser', async () => {
     await seed();
     render(<PopupApp />);
 
-    await waitFor(() =>
-      expect(
-        within(screen.getByRole('tabpanel')).getByText('Alt+H'),
-      ).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText('Alt+H')).toBeInTheDocument());
   });
 
   it('reports a cleared shortcut rather than showing a stale default', async () => {
@@ -128,9 +88,7 @@ describe('popup', () => {
 
     render(<PopupApp />);
     await waitFor(() =>
-      expect(
-        within(screen.getByRole('tabpanel')).getByText('Not set'),
-      ).toBeInTheDocument(),
+      expect(screen.getByText('Not set')).toBeInTheDocument(),
     );
   });
 
@@ -143,90 +101,6 @@ describe('popup', () => {
     );
     expect(chrome.runtime.openOptionsPage).toHaveBeenCalled();
   });
-
-  describe('playground', () => {
-    it('streams a result through the real port protocol', async () => {
-      await seed();
-      registerStreamHandler();
-      stubFetchEach(() =>
-        sseResponse(frames('They are going to the meeting.')),
-      );
-
-      render(<PopupApp />);
-      await userEvent.click(
-        await screen.findByRole('tab', { name: /Playground/ }),
-      );
-      await userEvent.click(screen.getByRole('button', { name: /^Run$/ }));
-
-      await waitFor(() =>
-        expect(
-          screen.getByText('They are going to the meeting.'),
-        ).toBeInTheDocument(),
-      );
-    });
-
-    /**
-     * The popup's own copy of the port protocol kept no reference to its port and
-     * never disconnected, so two runs interleaved into a single string.
-     */
-    it('does not interleave two runs', async () => {
-      await seed();
-      registerStreamHandler();
-      stubFetchEach((index) =>
-        sseResponse(frames(index === 0 ? 'first' : 'second')),
-      );
-
-      render(<PopupApp />);
-      await userEvent.click(
-        await screen.findByRole('tab', { name: /Playground/ }),
-      );
-
-      const run = screen.getByRole('button', { name: /^Run$/ });
-      await userEvent.click(run);
-      await waitFor(() =>
-        expect(screen.getByText('first')).toBeInTheDocument(),
-      );
-      await userEvent.click(screen.getByRole('button', { name: /^Run$/ }));
-
-      await waitFor(() =>
-        expect(screen.getByText('second')).toBeInTheDocument(),
-      );
-      expect(screen.queryByText(/firstsecond|secondfirst/)).toBeNull();
-    });
-
-    it('surfaces a provider error as an alert', async () => {
-      await seed();
-      registerStreamHandler();
-      stubFetchEach(
-        () =>
-          new Response(JSON.stringify({ error: { message: 'no' } }), {
-            status: 401,
-          }),
-      );
-
-      render(<PopupApp />);
-      await userEvent.click(
-        await screen.findByRole('tab', { name: /Playground/ }),
-      );
-      await userEvent.click(screen.getByRole('button', { name: /^Run$/ }));
-
-      await waitFor(() =>
-        expect(screen.getByRole('alert')).toHaveTextContent(/Invalid API key/),
-      );
-    });
-
-    it('refuses to run on empty input', async () => {
-      await seed();
-      render(<PopupApp />);
-
-      await userEvent.click(
-        await screen.findByRole('tab', { name: /Playground/ }),
-      );
-      await userEvent.clear(screen.getByLabelText(/^Text$/i));
-
-      expect(screen.getByRole('button', { name: /^Run$/ })).toBeDisabled();
-    });
-  });
 });
 
 describe('options', () => {
@@ -234,14 +108,14 @@ describe('options', () => {
     await seed();
     render(<OptionsApp />);
 
-    const language = await screen.findByLabelText(/Translate into/i);
-    await userEvent.clear(language);
-    await userEvent.type(language, 'Japanese');
+    // The theme is the remaining editable field on this page besides the model.
+    await userEvent.selectOptions(
+      await screen.findByLabelText(/Appearance/i),
+      'light',
+    );
 
     // Nothing persisted yet.
-    await expect(loadSettings()).resolves.toMatchObject({
-      translateLanguage: 'English',
-    });
+    await expect(loadSettings()).resolves.toMatchObject({ theme: 'system' });
 
     await userEvent.click(
       screen.getByRole('button', { name: /Save settings/i }),
@@ -250,39 +124,34 @@ describe('options', () => {
       expect(screen.getByRole('status')).toHaveTextContent('Saved'),
     );
     await expect(loadSettings()).resolves.toMatchObject({
-      translateLanguage: 'Japanese',
+      theme: 'light',
     });
   });
 
-  it('exposes the token limit, which no surface previously did', async () => {
+  /**
+   * The response limit, creativity and streaming controls were removed while
+   * keeping their values, so the options page must not offer them again.
+   */
+  it('no longer offers the settings that were fixed at their defaults', async () => {
     await seed();
     render(<OptionsApp />);
 
-    const limit = await screen.findByLabelText(/Response limit/i);
-    await userEvent.clear(limit);
-    await userEvent.type(limit, '4096');
-    await userEvent.click(
-      screen.getByRole('button', { name: /Save settings/i }),
-    );
-
-    await expect(loadSettings()).resolves.toMatchObject({ maxTokens: 4096 });
-  });
-
-  it('applies the theme to the document', async () => {
-    await seed({ theme: 'light' });
-    render(<OptionsApp />);
-
-    await waitFor(() =>
-      expect(document.documentElement.getAttribute('data-theme')).toBe('light'),
-    );
+    await screen.findByLabelText('Model');
+    expect(screen.queryByLabelText(/Response limit/i)).toBeNull();
+    expect(screen.queryByLabelText(/Creativity/i)).toBeNull();
+    expect(screen.queryByLabelText(/Translate into/i)).toBeNull();
   });
 
   it('reports a rejected save', async () => {
     await seed();
     render(<OptionsApp />);
 
-    const model = await screen.findByLabelText(/^Model$/i);
-    await userEvent.clear(model);
+    // An empty model violates the schema. The dropdown cannot produce one, so
+    // this goes through the typed-id escape hatch.
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Type an id/ }),
+    );
+    await userEvent.clear(await screen.findByLabelText(/^Model$/i));
     await userEvent.click(
       screen.getByRole('button', { name: /Save settings/i }),
     );

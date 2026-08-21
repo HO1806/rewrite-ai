@@ -1,30 +1,40 @@
 import { describe, expect, it } from 'vitest';
 import {
-  adjustParamsSchema,
   backgroundToContentMessageSchema,
   describeValidationError,
   streamMessageSchema,
   streamRequestSchema,
 } from '@/background/messages';
-import { MAX_INPUT_LENGTH, TONE_OPTIONS } from '@/shared/constants';
+import { MAX_INPUT_LENGTH } from '@/shared/constants';
 
 describe('backgroundToContentMessageSchema', () => {
-  it('accepts a rewrite request', () => {
+  it('accepts a rewrite trigger', () => {
     const result = backgroundToContentMessageSchema.safeParse({
-      type: 'REWRITE_REQUEST',
+      type: 'TRIGGER_REWRITE',
       action: 'improve',
-      text: 'hello',
+      language: 'English',
     });
     expect(result.success).toBe(true);
   });
 
-  it('accepts a trigger with no text', () => {
+  it('accepts a trigger carrying the translation language', () => {
     expect(
       backgroundToContentMessageSchema.safeParse({
         type: 'TRIGGER_REWRITE',
-        action: 'grammar',
+        action: 'translate',
+        language: 'French',
       }).success,
     ).toBe(true);
+  });
+
+  /** The content script must never have to look this up for itself. */
+  it('rejects a trigger with no language', () => {
+    expect(
+      backgroundToContentMessageSchema.safeParse({
+        type: 'TRIGGER_REWRITE',
+        action: 'improve',
+      }).success,
+    ).toBe(false);
   });
 
   it.each([
@@ -50,17 +60,6 @@ describe('streamRequestSchema', () => {
         type: 'START_REWRITE',
         action: 'improve',
         text: 'x',
-      }).success,
-    ).toBe(true);
-  });
-
-  it('accepts adjustments', () => {
-    expect(
-      streamRequestSchema.safeParse({
-        type: 'START_REWRITE',
-        action: 'improve',
-        text: 'x',
-        adjustParams: { tone: 'funny', format: 'email', length: 'short' },
       }).success,
     ).toBe(true);
   });
@@ -93,13 +92,8 @@ describe('streamRequestSchema', () => {
       { type: 'START_REWRITE', action: 'improve', text: 42 },
     ],
     [
-      'an unknown tone',
-      {
-        type: 'START_REWRITE',
-        action: 'improve',
-        text: 'x',
-        adjustParams: { tone: 'angry' },
-      },
+      'a removed action',
+      { type: 'START_REWRITE', action: 'concise', text: 'x' },
     ],
     ['an unknown action', { type: 'START_REWRITE', action: 'nope', text: 'x' }],
   ])('rejects %s', (_label, payload) => {
@@ -118,28 +112,6 @@ describe('streamMessageSchema', () => {
 
   it('rejects a CHUNK with no text', () => {
     expect(streamMessageSchema.safeParse({ type: 'CHUNK' }).success).toBe(
-      false,
-    );
-  });
-});
-
-describe('adjustParamsSchema', () => {
-  it('accepts an empty object', () => {
-    expect(adjustParamsSchema.safeParse({}).success).toBe(true);
-  });
-
-  /** Driven off the UI's own list so the two cannot drift. */
-  it('accepts every tone the UI offers', () => {
-    for (const { value } of TONE_OPTIONS) {
-      expect(adjustParamsSchema.safeParse({ tone: value }).success).toBe(true);
-    }
-  });
-
-  it('rejects the tones that were invented and then removed', () => {
-    expect(adjustParamsSchema.safeParse({ tone: 'informal' }).success).toBe(
-      false,
-    );
-    expect(adjustParamsSchema.safeParse({ tone: 'neutral' }).success).toBe(
       false,
     );
   });

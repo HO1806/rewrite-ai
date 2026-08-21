@@ -30,11 +30,8 @@ Loading the built extension: `chrome://extensions` → Developer mode → Load u
 ## How a rewrite flows
 
 ```
-inline Rewrite button (content/trigger.tsx) — the primary path
-  → content/index.tsx          opens the card directly, no worker round trip
-
-context menu click / Ctrl+Shift+D
-  → background/index.ts        resolves the action, delivers to the clicked frame
+Ctrl+Shift+D — the only entry point
+  → background/index.ts        reads lastAction + language from settings, delivers TRIGGER_REWRITE
   → background/tabs.ts         injects the content script if the tab lacks one, then resends
   → content/index.tsx          validates the message, opens the card
   → content/mount.ts           builds a shadow host + React root as a pair
@@ -54,8 +51,8 @@ The **fetch happens in the service worker**, never the content script. That is w
 | ----------------- | ------------------------------------------------------------------------------- |
 | `src/ai/`         | Providers, streaming, factory, safe JSON navigation                             |
 | `src/background/` | Service worker: context menus, tab messaging, port handler, Zod message schemas |
-| `src/content/`    | Content script: selection watcher, inline trigger, replacement, the card        |
-| `src/popup/`      | Toolbar popup (three tabs)                                                      |
+| `src/content/`    | Content script: selection reading, replacement, the card and its two tabs       |
+| `src/popup/`      | Toolbar popup (one settings panel)                                              |
 | `src/options/`    | Options page                                                                    |
 | `src/prompts/`    | Prompt definitions and adjustment phrasing                                      |
 | `src/shared/`     | Constants, types, theme resolution, error narrowing                             |
@@ -97,6 +94,21 @@ The **fetch happens in the service worker**, never the content script. That is w
 22. **Never send the selected text as the whole user turn.** A bare user message _is_ a message addressed to the model, so it answers the user's draft instead of rewriting it — intermittently, since it is a first-token coin flip. `assemblePrompt` in `src/prompts/` frames it: the task named from `ACTIONS`, the text inside a `<source_text>` delimiter, and the rule restated _after_ the content, because attention is causal and the last tokens decide the first token out. The user turn must stand alone — Gemma has no system role at all and Mistral has no system token, so on Ollama a system message is glued into the user turn or dropped.
 23. **A model id is a dated assertion, not a constant.** `PROVIDERS[].models` in `src/shared/constants.ts` is an offline fallback and the first-run default — nothing more. Groq retired both of the ids this extension shipped two months after announcing them, and cut access two days _before_ the published date, so the user met it as a 404 mid-rewrite; `models[0]` is also the default on a provider switch, so a stale entry breaks new users too. The provider is the source of truth: every one publishes a catalogue (`/models`, or `/api/tags` for Ollama), reached through `listModels` and the `LIST_MODELS` bridge. Never add a preview-tier model to the fallback — those are documented as removable at short notice.
 24. **Each in-page surface gets its own shadow host.** `mountSurface`/`unmountSurface` in `src/content/mount.ts` keep the React root and its host node as a pair, per surface (`card`, `trigger`). The inline trigger has to outlive the absence of a card and disappear when one opens, so they cannot share a host — and each host needs its own `z-index`, per rule 11.
+
+## What was deliberately removed
+
+The extension is shaped around one user who drives it from a mouse macro bound to
+`Ctrl+Shift+D`. Do not restore any of this without being asked:
+
+- **The inline trigger pill** and its `selectionchange` watcher, which was the only code
+  running continuously on every page of every site.
+- **The right-click menu**, and with it the `contextMenus` permission.
+- **Five of the seven actions.** Only Rewrite and Translate remain, as the card's two tabs.
+  Fix Grammar was merged into Rewrite, whose objective now decides how much to change:
+  correct a clean sentence, rewrite a clumsy one.
+- **The adjust drawer** (tone, format, length) and **the popup's Playground and Info tabs**.
+- **The creativity, response-limit and streaming controls.** Their values still exist in the
+  settings schema; only the controls went.
 
 ## Testing
 

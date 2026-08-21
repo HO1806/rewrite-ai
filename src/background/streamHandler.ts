@@ -20,7 +20,7 @@ import {
 } from '@/ai/types';
 import { buildProviderConfig, createProvider } from '@/ai/factory';
 import { assemblePrompt, sanitizeResult } from '@/prompts';
-import { Settings, loadSettings } from '@/storage/settings';
+import { Settings, loadSettings, updateSettings } from '@/storage/settings';
 import {
   REQUEST_TIMEOUT_MS,
   REQUEST_TIMEOUT_NO_STREAM_MS,
@@ -110,8 +110,21 @@ class StreamSession {
      */
     const prompt = assemblePrompt(request.action, request.text, {
       language: settings.translateLanguage,
-      ...request.adjustParams,
     });
+
+    /**
+     * Remember which tab the card was on, so the shortcut reopens there.
+     *
+     * Recorded here rather than through a message of its own: switching tabs in
+     * the card re-runs the rewrite, so every switch already passes through this
+     * point. A failure to persist must not abort the rewrite the user asked for.
+     */
+    if (settings.lastAction !== request.action) {
+      // Awaited, not fired and forgotten: the next press of the shortcut reads
+      // this back, and a write still in flight would reopen the previous tab.
+      // A failure to persist must not fail the rewrite the user asked for.
+      await updateSettings({ lastAction: request.action }).catch(() => {});
+    }
 
     const generator = provider.rewrite(prompt.user, prompt.system, {
       temperature: settings.temperature,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PROMPTS, assemblePrompt, resolveTag } from '@/prompts';
 import { SYSTEM_INSTRUCTION } from '@/prompts/types';
-import { ACTIONS, LENGTH_OPTIONS, TONE_OPTIONS } from '@/shared/constants';
+import { ACTIONS } from '@/shared/constants';
 import type { RewriteAction } from '@/shared/types';
 
 const ALL_ACTIONS = ACTIONS.map((action) => action.id);
@@ -27,17 +27,25 @@ describe('prompt definitions', () => {
   });
 
   it.each([
-    ['grammar', /grammatical/i],
-    ['professional', /professional/i],
-    ['friendly', /friendly/i],
-    ['concise', /concise/i],
-    ['expand', /fleshed out/i],
+    ['improve', /correct|rewrite/i],
+    ['translate', /idiomatically/i],
   ] as Array<[RewriteAction, RegExp]>)(
     '%s asks for the behaviour it names',
     (action, pattern) => {
       expect(assemblePrompt(action, SAMPLE).user).toMatch(pattern);
     },
   );
+
+  /**
+   * The merged Fix Grammar. The objective has to ask for judgement about how
+   * much to change, or the action silently becomes "rewrite everything".
+   */
+  it('tells the model to match the amount of change to the text', () => {
+    const { user } = assemblePrompt('improve', SAMPLE);
+
+    expect(user).toMatch(/only that much|change nothing else/i);
+    expect(user).toMatch(/never rewrite for the sake of rewriting/i);
+  });
 
   /**
    * The frame names the text; an objective that named it too would be a second
@@ -66,27 +74,29 @@ describe('compact by default', () => {
     expect(system).toMatch(/shorthand stays shorthand/i);
   });
 
-  it('asks improve to tighten rather than enrich', () => {
+  it('asks improve to change no more than the text needs', () => {
     const objective =
       assemblePrompt('improve', SAMPLE).user.split('Objective:')[1] ?? '';
 
-    expect(objective).toMatch(/tighten/i);
-    expect(objective).toMatch(/without padding/i);
-    // The word that did the damage: it invites longer words and fuller sentences.
-    expect(objective).not.toMatch(/vocabulary/i);
+    expect(objective).toMatch(/only that much/i);
+    expect(objective).toMatch(/never pad/i);
+    // The instruction that produced a 43% longer message from a correct one.
+    expect(objective).not.toMatch(/enhance sentence flow, vocabulary/i);
   });
 
-  /** The escape hatch has to survive, or this becomes a regression for Expand. */
-  it('leaves room for the actions that are meant to lengthen', () => {
+  /**
+   * Translate must not be dragged toward brevity by the compactness rule, since
+   * some languages simply need more words than the source did.
+   */
+  it('leaves room for a translation to be longer than its source', () => {
     const { system } = assemblePrompt('improve', SAMPLE);
-    expect(system).toMatch(/unless the objective or the requirements/i);
+    expect(system).toMatch(/unless the objective/i);
 
-    const expand =
-      assemblePrompt('expand', SAMPLE).user.split('Objective:')[1] ?? '';
-    expect(expand).toMatch(/add/i);
-
-    const long = assemblePrompt('improve', SAMPLE, { length: 'long' }).user;
-    expect(long).toMatch(/longer|detailed/i);
+    const translate =
+      assemblePrompt('translate', SAMPLE, { language: 'German' }).user.split(
+        'Objective:',
+      )[1] ?? '';
+    expect(translate).toMatch(/idiomatically/i);
   });
 });
 
@@ -119,9 +129,11 @@ describe('the prompt frame', () => {
   it('names the task rather than deferring to the system prompt', () => {
     // On Gemma there is no system role at all, so "your instructions" would be a
     // dangling reference.
-    const { user } = assemblePrompt('grammar', SAMPLE);
+    const { user } = assemblePrompt('translate', SAMPLE, {
+      language: 'German',
+    });
 
-    expect(user).toContain('Task: Fix Grammar.');
+    expect(user).toContain('Task: Translate.');
     expect(user).not.toMatch(/your instructions/i);
   });
 
@@ -210,72 +222,5 @@ describe('translate', () => {
 
   it('defaults to English when no language is given', () => {
     expect(assemblePrompt('translate', SAMPLE).user).toContain('English');
-  });
-});
-
-describe('adjustments', () => {
-  it('omits the requirements block when nothing is set', () => {
-    expect(assemblePrompt('improve', SAMPLE).user).not.toContain(
-      'Requirements:',
-    );
-  });
-
-  it.each(TONE_OPTIONS.map((option) => option.value))(
-    'applies the %s tone',
-    (tone) => {
-      const { user } = assemblePrompt('improve', SAMPLE, { tone });
-
-      expect(user).toContain('Requirements:');
-      expect(user.toLowerCase()).toContain(
-        tone === 'funny' ? 'humorous' : tone,
-      );
-    },
-  );
-
-  /**
-   * The pill labelled "Funny" used to send `neutral`, which asks the model to be
-   * neutral and objective — the opposite of the label.
-   */
-  it('asks for humour, not neutrality, for the funny tone', () => {
-    const { user } = assemblePrompt('improve', SAMPLE, { tone: 'funny' });
-
-    expect(user).toMatch(/humorous/i);
-    expect(user).not.toMatch(/neutral and objective/i);
-  });
-
-  it.each(LENGTH_OPTIONS.map((option) => option.value))(
-    'applies the %s length',
-    (length) => {
-      expect(assemblePrompt('improve', SAMPLE, { length }).user).toMatch(
-        /short|medium|longer|detailed/i,
-      );
-    },
-  );
-
-  it('applies a format instruction', () => {
-    expect(assemblePrompt('improve', SAMPLE, { format: 'email' }).user).toMatch(
-      /email/i,
-    );
-  });
-
-  it('combines all three adjustments as a list', () => {
-    const { user } = assemblePrompt('improve', SAMPLE, {
-      tone: 'professional',
-      format: 'email',
-      length: 'short',
-    });
-
-    const requirements = user.split('Requirements:')[1] ?? '';
-    expect(requirements.match(/^- /gm)).toHaveLength(3);
-  });
-
-  it('carries adjustments through the translate prompt too', () => {
-    const { user } = assemblePrompt('translate', SAMPLE, {
-      language: 'German',
-      tone: 'casual',
-    });
-
-    expect(user).toContain('German');
-    expect(user).toMatch(/casual/i);
   });
 });

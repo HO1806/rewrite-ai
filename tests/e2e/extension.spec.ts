@@ -48,38 +48,45 @@ async function waitForContentScript(worker: Worker): Promise<number> {
   });
 }
 
-/** Deliver a rewrite request, the way the context menu does. */
+/**
+ * Fire the shortcut, which is the extension's only entry point.
+ *
+ * The message carries no text: the content script reads the live selection
+ * itself, and a card that cannot write its result back is worse than no card.
+ */
 async function triggerRewrite(
   worker: Worker,
-  text: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const tabId = await waitForContentScript(worker);
 
-  return worker.evaluate(
-    async ([id, selectionText]) => {
-      try {
-        await chrome.tabs.sendMessage(id as number, {
-          type: 'REWRITE_REQUEST',
-          action: 'improve',
-          text: selectionText as string,
-        });
-        return { ok: true };
-      } catch (err) {
-        return { ok: false, error: String(err) };
-      }
-    },
-    [tabId, text] as const,
-  );
+  return worker.evaluate(async (id) => {
+    try {
+      /**
+       * Reads the stored action and language exactly as the command handler
+       * does. Hardcoding `improve` here made this helper unable to observe the
+       * remembered tab at all — the behaviour it is used to test.
+       */
+      const stored = await chrome.storage.local.get('rewrite-ai-settings');
+      const settings = (stored['rewrite-ai-settings'] ?? {}) as {
+        lastAction?: string;
+        translateLanguage?: string;
+      };
+
+      await chrome.tabs.sendMessage(id, {
+        type: 'TRIGGER_REWRITE',
+        action: settings.lastAction ?? 'improve',
+        language: settings.translateLanguage ?? 'English',
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  }, tabId);
 }
 
 /** The card lives in a shadow root; Playwright pierces it automatically. */
 function card(page: Page) {
   return page.locator('#rewrite-ai-root .card');
-}
-
-/** The inline offer, in its own shadow host. */
-function trigger(page: Page) {
-  return page.locator('#rewrite-ai-trigger .trigger');
 }
 
 /**
@@ -115,27 +122,6 @@ async function selectAllInEditable(page: Page, id: string): Promise<void> {
     selection.addRange(range);
     document.dispatchEvent(new Event('selectionchange'));
   }, id);
-}
-
-/**
- * Announce the current selection until the content script reacts.
- *
- * `page.goto` resolves while the content script's dynamic import is still in
- * flight — the same race the worker's PING backoff exists for. A single
- * `selectionchange` dispatched straight after navigation can land before
- * `registerInlineTrigger` has run, and a missed event never comes back, so no
- * amount of assertion retrying recovers it. Re-announcing is safe: the watcher
- * re-reads the same live selection.
- */
-async function announceSelection(page: Page): Promise<void> {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    await page.evaluate(() =>
-      document.dispatchEvent(new Event('selectionchange')),
-    );
-    if (await page.locator('#rewrite-ai-trigger').count()) return;
-    await page.waitForTimeout(100);
-  }
-  throw new Error('the inline trigger never appeared');
 }
 
 /**
@@ -190,32 +176,14 @@ test.describe('extension loads', () => {
     expect(worker.url()).toContain('service-worker-loader.js');
   });
 
-  /**
-   * The failure that put a red "Errors" badge on the extension card: a rebuild
-   * racing another one deletes the parent between its create and the children's,
-   * and all seven children fail with "Cannot find menu item".
-   */
-  test('builds its context menu without errors', async ({ worker }) => {
-    const problems: string[] = [];
-    worker.on('console', (message) => {
-      if (message.type() === 'warning' || message.type() === 'error') {
-        problems.push(message.text());
-      }
-    });
-
-    // Give onInstalled's rebuild time to complete.
-    await new Promise((r) => setTimeout(r, 2000));
-
-    // The parent-cascade failure produced exactly this, seven times over, and
-    // left no menu at all. Serialization of concurrent rebuilds is unit-tested
-    // in tests/background/contextMenus.test.ts; extension events cannot be
-    // dispatched from a page context.
-    expect(
-      problems.filter((line) => /Cannot find menu item/.test(line)),
-    ).toEqual([]);
-    expect(problems.filter((line) => /Could not create/.test(line))).toEqual(
-      [],
+  /** The permission went with the menu; asking for what you do not use is noise. */
+  test('does not request the context-menu permission', async ({ worker }) => {
+    const permissions = await worker.evaluate(
+      () => chrome.runtime.getManifest().permissions ?? [],
     );
+
+    expect(permissions).not.toContain('contextMenus');
+    expect(permissions).toContain('storage');
   });
 
   test('renders the popup with its stylesheet applied', async ({
@@ -225,7 +193,8 @@ test.describe('extension loads', () => {
     const popup = await context.newPage();
     await popup.goto(`chrome-extension://${extensionId}/src/popup/index.html`);
 
-    await expect(popup.getByRole('tab', { name: /Setup/ })).toBeVisible();
+    // One panel now; the Setup/Playground/Info tablist is gone.
+    await expect(popup.getByLabel('Model')).toBeVisible();
     // A token-derived background proves the stylesheet loaded, not just the JS.
     const background = await popup.evaluate(
       () => getComputedStyle(document.body).backgroundColor,
@@ -249,7 +218,9 @@ test.describe('extension loads', () => {
     await expect(
       options.getByRole('button', { name: /Save settings/ }),
     ).toBeVisible();
-    await expect(options.getByLabel(/Response limit/)).toBeVisible();
+    // The response limit, creativity and streaming controls were removed while
+    // keeping their values; the model picker is what the page is for now.
+    await expect(options.getByLabel('Model')).toBeVisible();
   });
 });
 
@@ -271,9 +242,7 @@ test.describe('the floating card', () => {
     await page.goto(pageUrl);
     await selectAllIn(page, 'ta');
 
-    expect(
-      await triggerRewrite(worker, 'their going to the meating tomorow'),
-    ).toEqual({ ok: true });
+    expect(await triggerRewrite(worker)).toEqual({ ok: true });
 
     await expect(card(page)).toBeVisible();
 
@@ -308,7 +277,7 @@ test.describe('the floating card', () => {
     await page.goto(pageUrl);
     await selectAllIn(page, 'ta');
 
-    await triggerRewrite(worker, 'their going to the meating tomorow');
+    await triggerRewrite(worker);
 
     await expect(card(page)).toContainText(EXPECTED_REWRITE);
     await expect(page.getByRole('button', { name: /^Replace$/ })).toBeEnabled();
@@ -338,7 +307,7 @@ test.describe('the floating card', () => {
     // rewrites the live selection rather than the text in the message.
     await setValue(page, 'ta', LONG_INPUT);
     await selectAllIn(page, 'ta');
-    await triggerRewrite(worker, LONG_INPUT);
+    await triggerRewrite(worker);
 
     await expect(card(page)).toContainText(LONG_REWRITE_FRAGMENT);
 
@@ -361,8 +330,10 @@ test.describe('the floating card', () => {
     // The suggestion area is what gave way, and it is still readable.
     expect(geometry.outputHeight).toBeGreaterThan(100);
 
-    // Opening Adjust adds another ~130px, so it is what overflows first.
-    await page.getByRole('button', { name: /Adjust/ }).click();
+    // The language picker is the one thing that still grows the card after it
+    // has streamed, now that the adjust drawer is gone.
+    await page.getByRole('tab', { name: 'Translate' }).click();
+    await page.getByRole('button', { name: /Language:/ }).click();
     await expect
       .poll(() => page.evaluate(measureCard).then((m) => m.overhang))
       .toBeLessThanOrEqual(0);
@@ -373,7 +344,7 @@ test.describe('the floating card', () => {
     const page = await context.newPage();
     await page.goto(pageUrl);
     await selectAllIn(page, 'ta');
-    await triggerRewrite(worker, 'some text');
+    await triggerRewrite(worker);
     await expect(card(page)).toBeVisible();
 
     await page.keyboard.press('Escape');
@@ -386,118 +357,71 @@ test.describe('the floating card', () => {
  * right-click. Only a real browser can confirm it is visible and clickable
  * against a hostile page.
  */
-test.describe('the inline trigger', () => {
+/**
+ * The card's two modes, and the only route to Translate now that the right-click
+ * menu is gone.
+ */
+test.describe('the mode tabs', () => {
   test.beforeEach(async ({ seedSettings }) => {
     await seedSettings();
   });
 
-  test('appears on selecting text in a textarea, above a high z-index overlay', async ({
+  test('switch between Rewrite and Translate, with a language gear', async ({
     context,
-    pageUrl,
-  }) => {
-    const page = await context.newPage();
-    await page.goto(pageUrl);
-
-    await expect(trigger(page)).toHaveCount(0);
-    await selectAllIn(page, 'ta');
-    await announceSelection(page);
-
-    await expect(trigger(page)).toBeVisible();
-    await expect(trigger(page)).toContainText('Rewrite');
-
-    // The same hit test that caught the missing z-index on the card: the button
-    // must be what the user actually clicks, not the page's overlay.
-    const topmost = await page.evaluate(() => {
-      const host = document.getElementById('rewrite-ai-trigger')!;
-      const box = host
-        .shadowRoot!.querySelector('.trigger')!
-        .getBoundingClientRect();
-      const hit = document.elementFromPoint(
-        box.left + box.width / 2,
-        box.top + box.height / 2,
-      );
-      return hit?.id ?? hit?.tagName ?? null;
-    });
-    expect(topmost).toBe('rewrite-ai-trigger');
-  });
-
-  test('appears for a text input too', async ({ context, pageUrl }) => {
-    const page = await context.newPage();
-    await page.goto(pageUrl);
-    await selectAllIn(page, 'inp');
-    await announceSelection(page);
-
-    await expect(trigger(page)).toBeVisible();
-  });
-
-  /** The editable-only scope: no offer where the result could not be applied. */
-  test('does not appear for read-only page text', async ({
-    context,
-    pageUrl,
-  }) => {
-    const page = await context.newPage();
-    await page.goto(pageUrl);
-
-    await page.evaluate(() => {
-      const range = document.createRange();
-      range.selectNodeContents(document.getElementById('para')!);
-      const selection = getSelection()!;
-      selection.removeAllRanges();
-      selection.addRange(range);
-      document.dispatchEvent(new Event('selectionchange'));
-    });
-
-    await expect(page.locator('#rewrite-ai-trigger')).toHaveCount(0);
-  });
-
-  test('opens the card when clicked, and gets out of the way', async ({
-    context,
+    worker,
     pageUrl,
   }) => {
     const page = await context.newPage();
     await page.goto(pageUrl);
     await selectAllIn(page, 'ta');
-    await announceSelection(page);
-    await expect(trigger(page)).toBeVisible();
+    await triggerRewrite(worker);
 
-    await trigger(page).click();
-
-    await expect(card(page)).toBeVisible();
     await expect(card(page)).toContainText(EXPECTED_REWRITE);
-    // The offer must not linger behind the card it opened.
-    await expect(page.locator('#rewrite-ai-trigger')).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Rewrite' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    // The gear is Translate's; on Rewrite it would be a control that does nothing.
+    await expect(page.getByRole('button', { name: /Language:/ })).toHaveCount(
+      0,
+    );
+
+    await page.getByRole('tab', { name: 'Translate' }).click();
+
+    await expect(page.getByRole('tab', { name: 'Translate' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(
+      page.getByRole('button', { name: /Language: English/ }),
+    ).toBeVisible();
+
+    await page.getByRole('button', { name: /Language: English/ }).click();
+    await expect(page.getByLabel(/Translate into/)).toBeVisible();
   });
 
-  test('the whole flow works end to end from the button', async ({
-    context,
-    pageUrl,
-  }) => {
+  /**
+   * The shortcut reopens the tab last used — the reason `lastAction` is persisted
+   * rather than defaulting to Rewrite every time.
+   */
+  test('reopen on the tab last used', async ({ context, worker, pageUrl }) => {
     const page = await context.newPage();
     await page.goto(pageUrl);
     await selectAllIn(page, 'ta');
-    await announceSelection(page);
+    await triggerRewrite(worker);
 
-    await trigger(page).click();
     await expect(card(page)).toContainText(EXPECTED_REWRITE);
-    await page.getByRole('button', { name: /^Replace$/ }).click();
+    await page.getByRole('tab', { name: 'Translate' }).click();
+    await page.keyboard.press('Escape');
+    await expect(card(page)).toHaveCount(0);
 
-    await expect(page.locator('#ta')).toHaveValue(EXPECTED_REWRITE);
-  });
-
-  test('hides when the selection collapses', async ({ context, pageUrl }) => {
-    const page = await context.newPage();
-    await page.goto(pageUrl);
     await selectAllIn(page, 'ta');
-    await announceSelection(page);
-    await expect(trigger(page)).toBeVisible();
+    await triggerRewrite(worker);
 
-    await page.evaluate(() => {
-      const el = document.getElementById('ta') as HTMLTextAreaElement;
-      el.setSelectionRange(0, 0);
-      document.dispatchEvent(new Event('selectionchange'));
-    });
-
-    await expect(page.locator('#rewrite-ai-trigger')).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Translate' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 });
 
@@ -536,7 +460,7 @@ test.describe('replacement', () => {
         el.setSelectionRange(0, el.value.length);
       }, field.id);
 
-      await triggerRewrite(worker, field.original);
+      await triggerRewrite(worker);
       await expect(card(page)).toContainText(EXPECTED_REWRITE);
 
       await page.getByRole('button', { name: /^Replace$/ }).click();
@@ -559,6 +483,7 @@ test.describe('replacement', () => {
    */
   test('substitutes the selected text in a contenteditable', async ({
     context,
+    worker,
     pageUrl,
   }) => {
     const original = 'their going to the meating tomorow';
@@ -566,12 +491,7 @@ test.describe('replacement', () => {
     await page.goto(pageUrl);
 
     await selectAllInEditable(page, 'ce');
-    await announceSelection(page);
-    await expect(trigger(page)).toBeVisible();
-
-    // Real clicks throughout: the mousedown on each button is what moves the
-    // selection, and that is the whole mechanism under test.
-    await trigger(page).click();
+    await triggerRewrite(worker);
     await expect(card(page)).toContainText(EXPECTED_REWRITE);
     await page.getByRole('button', { name: /^Replace$/ }).click();
 
@@ -590,6 +510,7 @@ test.describe('replacement', () => {
    */
   test('substitutes in an editor that owns its own document', async ({
     context,
+    worker,
     pageUrl,
   }) => {
     const original = 'their going to the meating tomorow';
@@ -597,9 +518,7 @@ test.describe('replacement', () => {
     await page.goto(pageUrl);
 
     await selectAllInEditable(page, 'ce-model');
-    await announceSelection(page);
-
-    await trigger(page).click();
+    await triggerRewrite(worker);
     await expect(card(page)).toContainText(EXPECTED_REWRITE);
     await page.getByRole('button', { name: /^Replace$/ }).click();
 
@@ -624,14 +543,14 @@ test.describe('an editor that cannot be persuaded', () => {
 
   test('admits the field needs checking instead of claiming success', async ({
     context,
+    worker,
     pageUrl,
   }) => {
     const page = await context.newPage();
     await page.goto(pageUrl);
 
     await selectAllInEditable(page, 'ce-hostile');
-    await announceSelection(page);
-    await trigger(page).click();
+    await triggerRewrite(worker);
     await expect(card(page)).toContainText(EXPECTED_REWRITE);
 
     await page.getByRole('button', { name: /^Replace$/ }).click();
@@ -659,6 +578,7 @@ test.describe('a real Lexical editor', () => {
 
   test('substitutes the selection rather than adding to it', async ({
     context,
+    worker,
     lexicalUrl,
   }) => {
     const page = await context.newPage();
@@ -667,8 +587,7 @@ test.describe('a real Lexical editor', () => {
     await expect(page.locator('#editor')).toContainText(LEXICAL_ORIGINAL);
 
     await selectAllInEditable(page, 'editor');
-    await announceSelection(page);
-    await trigger(page).click();
+    await triggerRewrite(worker);
     await expect(card(page)).toContainText(EXPECTED_REWRITE);
 
     await page.getByRole('button', { name: /^Replace$/ }).click();
@@ -710,7 +629,7 @@ test.describe('content script recovery', () => {
     await page.goto(pageUrl);
     await selectAllIn(page, 'ta');
 
-    expect(await triggerRewrite(worker, 'first attempt')).toEqual({ ok: true });
+    expect(await triggerRewrite(worker)).toEqual({ ok: true });
     await expect(card(page)).toBeVisible();
   });
 });

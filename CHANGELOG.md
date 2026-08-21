@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — trimmed to one shortcut and two tabs
+
+The extension was shaped around a user who drives it entirely from a mouse macro bound to
+`Ctrl+Shift+D`, so everything else was removed rather than maintained.
+
+- **The inline trigger pill and the right-click menu are gone**, along with the
+  `contextMenus` permission. The `selectionchange` watcher went with the pill — the only part
+  of this extension that ran continuously on every page of every site.
+- **Two actions remain, as tabs in the card**: Rewrite and Translate. The shortcut reopens
+  whichever tab was used last, and Translate carries a gear that picks the language.
+  Professional, Friendly, Concise and Expand are gone; **Fix Grammar merged into Rewrite**,
+  whose objective now decides how much to change — correcting a clean sentence and rewriting
+  a clumsy one, rather than rewriting everything by default.
+- **The adjust drawer, the Playground tab and the Info tab are gone.** The popup is a single
+  settings panel; the shortcut it used to display now sits beside the settings it applies to.
+- **Creativity, response limit and streaming are no longer controls.** Their values are
+  unchanged in the settings schema.
+
+### Added — a rated model dropdown
+
+- The model field is a **dropdown, strongest first, with an `n/10` beside each name**, scored
+  relative to the other models on offer. It is a heuristic over model names — parameter
+  counts, tier words, version numbers — and the UI says so rather than presenting it as
+  measurement. A name it cannot read shows `—` instead of a made-up number, and a "type an
+  id" escape hatch remains for Ollama tags and models too new to be listed.
+- `prefers-reduced-motion` now gets a **static** progress indicator. Zeroing the spinner's
+  duration had left a ring frozen mid-rotation, which reads as broken rather than busy.
+
 ### Fixed — the model list going stale
 
 - **Models are now read from the provider.** Groq retired

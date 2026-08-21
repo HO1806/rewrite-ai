@@ -267,35 +267,9 @@ suite(`prompt behaviour on ${model}`, () => {
   });
 
   /**
-   * The controls. The compact default must not have disabled the actions whose
-   * entire purpose is to change length.
+   * Translate is the other half of the card, and the only other action left.
    */
-  describe('leaves the deliberate actions alone', () => {
-    it(
-      'still lets expand lengthen',
-      async () => {
-        const input = 'shipping friday. tell the team.';
-        const output = await rewrite('expand', input);
-        report('expand', input, output);
-
-        expect(output.length).toBeGreaterThan(input.length);
-      },
-      TIMEOUT_MS,
-    );
-
-    it(
-      'still lets concise shorten',
-      async () => {
-        const input =
-          'I just wanted to reach out and let you know that, at this point in time, we are basically more or less ready to go ahead with the launch.';
-        const output = await rewrite('concise', input);
-        report('concise', input, output);
-
-        expect(output.length).toBeLessThan(input.length);
-      },
-      TIMEOUT_MS,
-    );
-
+  describe('the translate tab', () => {
     it(
       'translates without answering',
       async () => {

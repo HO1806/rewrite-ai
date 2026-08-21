@@ -247,15 +247,16 @@ describe('registerStreamHandler', () => {
     expect(signals[0]!.aborted).toBe(true);
   });
 
-  it('applies adjustments to the prompt it sends', async () => {
-    await seedSettings();
+  /**
+   * The card's Translate tab reaches the provider through the same port, and the
+   * language comes from settings rather than the message.
+   */
+  it('builds the translate prompt from the stored language', async () => {
+    await seedSettings({ translateLanguage: 'Portuguese' });
     const calls = stubFetch([sseResponse(frames('ok'))]);
 
     const { client } = connect();
-    client.postMessage({
-      ...REQUEST,
-      adjustParams: { tone: 'funny', length: 'short' },
-    });
+    client.postMessage({ ...REQUEST, action: 'translate' });
     await settle();
 
     const body = JSON.parse(String(calls[0]!.init.body)) as {
@@ -264,11 +265,9 @@ describe('registerStreamHandler', () => {
     const user = body.messages.find(
       (message) => message.role === 'user',
     )!.content;
-    // Adjustments belong beside the content they apply to. This assertion used to
-    // read the *system* message and so could not have caught a user turn that
-    // carried nothing but the raw selection.
-    expect(user).toMatch(/humorous/i);
-    expect(user).toMatch(/short/i);
+
+    expect(user).toContain('Portuguese');
+    expect(user).toContain('Task: Translate.');
   });
 
   /**

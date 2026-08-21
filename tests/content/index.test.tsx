@@ -71,14 +71,14 @@ function selectInTextarea(
   return textarea;
 }
 
-describe('REWRITE_REQUEST', () => {
+describe('TRIGGER_REWRITE', () => {
   it('opens the card for a selection in an editable field', async () => {
     selectInTextarea();
     const listener = await loadContentScript();
     const respond = vi.fn();
 
     listener(
-      { type: 'REWRITE_REQUEST', action: 'improve', text: 'fix me' },
+      { type: 'TRIGGER_REWRITE', action: 'improve', language: 'English' },
       {},
       respond,
     );
@@ -93,7 +93,7 @@ describe('REWRITE_REQUEST', () => {
     const listener = await loadContentScript();
 
     listener(
-      { type: 'REWRITE_REQUEST', action: 'translate', text: 'hola' },
+      { type: 'TRIGGER_REWRITE', action: 'translate', language: 'English' },
       {},
       vi.fn(),
     );
@@ -123,11 +123,7 @@ describe('REWRITE_REQUEST', () => {
     const respond = vi.fn();
 
     listener(
-      {
-        type: 'REWRITE_REQUEST',
-        action: 'improve',
-        text: 'read-only article text',
-      },
+      { type: 'TRIGGER_REWRITE', action: 'improve', language: 'English' },
       {},
       respond,
     );
@@ -141,7 +137,7 @@ describe('REWRITE_REQUEST', () => {
     const listener = await loadContentScript();
 
     listener(
-      { type: 'REWRITE_REQUEST', action: 'improve', text: 'from the menu' },
+      { type: 'TRIGGER_REWRITE', action: 'improve', language: 'English' },
       {},
       vi.fn(),
     );
@@ -161,7 +157,7 @@ describe('REWRITE_REQUEST', () => {
     const listener = await loadContentScript();
 
     listener(
-      { type: 'REWRITE_REQUEST', action: 'improve', text: 'menu text' },
+      { type: 'TRIGGER_REWRITE', action: 'improve', language: 'English' },
       {},
       vi.fn(),
     );
@@ -183,7 +179,11 @@ describe('TRIGGER_REWRITE', () => {
     const listener = await loadContentScript();
     const respond = vi.fn();
 
-    listener({ type: 'TRIGGER_REWRITE', action: 'improve' }, {}, respond);
+    listener(
+      { type: 'TRIGGER_REWRITE', action: 'improve', language: 'English' },
+      {},
+      respond,
+    );
     await settle();
 
     expect(respond).toHaveBeenCalledWith({ status: 'ok' });
@@ -209,9 +209,9 @@ describe('message validation', () => {
     ['an unknown type', { type: 'SOMETHING_ELSE' }],
     [
       'an unknown action',
-      { type: 'REWRITE_REQUEST', action: 'destroy', text: 'x' },
+      { type: 'TRIGGER_REWRITE', action: 'destroy', language: 'English' },
     ],
-    ['a missing text field', { type: 'REWRITE_REQUEST', action: 'improve' }],
+    ['a missing language', { type: 'TRIGGER_REWRITE', action: 'improve' }],
     ['a null payload', null],
     ['a bare string', 'REWRITE_REQUEST'],
   ])('ignores %s without responding', async (_label, payload) => {
@@ -231,7 +231,7 @@ describe('message validation', () => {
     const listener = await loadContentScript();
 
     const result = listener(
-      { type: 'REWRITE_REQUEST', action: 'improve', text: 'x' },
+      { type: 'TRIGGER_REWRITE', action: 'improve', language: 'English' },
       {},
       vi.fn(),
     );
@@ -254,7 +254,7 @@ describe('theming', () => {
     const listener = await loadContentScript();
 
     listener(
-      { type: 'REWRITE_REQUEST', action: 'improve', text: 'x' },
+      { type: 'TRIGGER_REWRITE', action: 'improve', language: 'English' },
       {},
       vi.fn(),
     );
@@ -272,7 +272,7 @@ describe('theming', () => {
     const listener = await loadContentScript();
 
     listener(
-      { type: 'REWRITE_REQUEST', action: 'improve', text: 'x' },
+      { type: 'TRIGGER_REWRITE', action: 'improve', language: 'English' },
       {},
       vi.fn(),
     );

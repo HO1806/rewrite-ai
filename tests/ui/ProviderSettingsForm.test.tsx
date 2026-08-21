@@ -182,38 +182,54 @@ describe('ProviderSettingsForm', () => {
     );
   });
 
-  it('applies a model preset chip', async () => {
+  it('selects a model from the dropdown', async () => {
     const onChange = vi.fn();
     render(<ProviderSettingsForm settings={settings()} onChange={onChange} />);
 
     const preset = getProvider('openai').models[1]!;
-    await userEvent.click(screen.getByRole('button', { name: preset }));
+    await userEvent.selectOptions(screen.getByLabelText('Model'), preset);
 
     expect(onChange).toHaveBeenCalledWith({ model: preset });
   });
 
-  it('reports the temperature as a number', async () => {
+  /** Strongest first, so the best option is the one already under the cursor. */
+  it('lists models rated and strongest first', () => {
+    render(<ProviderSettingsForm settings={settings()} onChange={vi.fn()} />);
+
+    const labels = screen
+      .getAllByRole('option')
+      .map((option) => option.textContent ?? '')
+      .filter((label) => label.includes('/10'));
+
+    expect(labels[0]).toMatch(/^10\/10/);
+    const ratings = labels.map((label) => Number(label.split('/')[0]));
+    expect([...ratings].sort((a, b) => b - a)).toEqual(ratings);
+  });
+
+  /** Ollama tags and brand-new ids will never be in a fetched list. */
+  it('lets a model id be typed instead of chosen', async () => {
     const onChange = vi.fn();
     render(<ProviderSettingsForm settings={settings()} onChange={onChange} />);
 
-    const slider = screen.getByLabelText(/Creativity/i);
-    await userEvent.clear(slider).catch(() => {});
-    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    await userEvent.click(screen.getByRole('button', { name: /Type an id/ }));
+    await userEvent.type(screen.getByLabelText('Model'), '!');
 
-    expect(screen.getByText('0.30')).toBeInTheDocument();
+    expect(onChange).toHaveBeenCalled();
   });
 
-  it('toggles streaming', async () => {
-    const onChange = vi.fn();
+  /**
+   * A stored model absent from the list would leave the select showing the first
+   * option while storage said otherwise — a control lying about its own value.
+   */
+  it('always offers whatever model is currently set', () => {
     render(
       <ProviderSettingsForm
-        settings={settings({ stream: true })}
-        onChange={onChange}
+        settings={settings({ model: 'something-exotic' })}
+        onChange={vi.fn()}
       />,
     );
 
-    await userEvent.click(screen.getByRole('checkbox'));
-    expect(onChange).toHaveBeenCalledWith({ stream: false });
+    expect(screen.getByLabelText('Model')).toHaveValue('something-exotic');
   });
 
   describe('compact variant', () => {
@@ -226,19 +242,23 @@ describe('ProviderSettingsForm', () => {
         />,
       );
 
-      expect(screen.queryByLabelText(/Response limit/i)).toBeNull();
-      expect(screen.queryByLabelText(/Translate into/i)).toBeNull();
       expect(screen.queryByLabelText(/Appearance/i)).toBeNull();
     });
   });
 
   describe('full variant', () => {
-    /** Both fields were stored and validated but editable in neither surface. */
-    it('exposes the token limit and translate language', () => {
+    /**
+     * Creativity, the token limit and the streaming toggle were removed as
+     * controls while keeping their values, and the translation language moved to
+     * the gear on the card's Translate tab. None of them should reappear here.
+     */
+    it('does not offer the settings that were deliberately fixed', () => {
       render(<ProviderSettingsForm settings={settings()} onChange={vi.fn()} />);
 
-      expect(screen.getByLabelText(/Response limit/i)).toHaveValue(2048);
-      expect(screen.getByLabelText(/Translate into/i)).toHaveValue('English');
+      expect(screen.queryByLabelText(/Creativity/i)).toBeNull();
+      expect(screen.queryByLabelText(/Response limit/i)).toBeNull();
+      expect(screen.queryByLabelText(/Translate into/i)).toBeNull();
+      expect(screen.queryByRole('checkbox')).toBeNull();
     });
 
     it('exposes the theme, which nothing previously read', async () => {
@@ -269,8 +289,12 @@ describe('ProviderSettingsForm loading models from the provider', () => {
   it('offers the bundled presets before anything is fetched', () => {
     render(<ProviderSettingsForm settings={settings()} onChange={vi.fn()} />);
 
+    const labels = screen
+      .getAllByRole('option')
+      .map((option) => option.textContent ?? '');
+
     for (const model of getProvider(DEFAULT_SETTINGS.provider).models) {
-      expect(screen.getByRole('button', { name: model })).toBeInTheDocument();
+      expect(labels.some((label) => label.includes(model))).toBe(true);
     }
   });
 
@@ -284,15 +308,19 @@ describe('ProviderSettingsForm loading models from the provider', () => {
     await userEvent.click(screen.getByRole('button', { name: /Load models/ }));
 
     expect(
-      await screen.findByRole('button', { name: 'fetched-a' }),
+      await screen.findByRole('option', { name: /fetched-a/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'fetched-b' }),
+      screen.getByRole('option', { name: /fetched-b/ }),
     ).toBeInTheDocument();
-    // The stale guess must be gone, not merged with the truth.
-    const [firstPreset] = getProvider(DEFAULT_SETTINGS.provider).models;
+    /**
+     * The stale guess must be gone, not merged with the truth — except for the
+     * model actually selected, which is always offered so the control cannot
+     * misrepresent the stored setting.
+     */
+    const unselectedPreset = getProvider(DEFAULT_SETTINGS.provider).models[1]!;
     expect(
-      screen.queryByRole('button', { name: firstPreset }),
+      screen.queryByRole('option', { name: new RegExp(unselectedPreset) }),
     ).not.toBeInTheDocument();
   });
 
@@ -303,9 +331,8 @@ describe('ProviderSettingsForm loading models from the provider', () => {
     render(<ProviderSettingsForm settings={settings()} onChange={onChange} />);
 
     await userEvent.click(screen.getByRole('button', { name: /Load models/ }));
-    await userEvent.click(
-      await screen.findByRole('button', { name: 'fetched-a' }),
-    );
+    await screen.findByRole('option', { name: /fetched-a/ });
+    await userEvent.selectOptions(screen.getByLabelText('Model'), 'fetched-a');
 
     expect(onChange).toHaveBeenCalledWith({ model: 'fetched-a' });
   });

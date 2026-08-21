@@ -95,17 +95,34 @@ makes thirteen cases unrunnable, and `expectNotTruncated` guards the difference.
 model can pass this suite and still write something clumsy; these are floors, not a
 quality bar.
 
-## The selection watcher has not been tested on a heavy editor
+## The feature set is deliberately small
 
-`src/content/trigger.ts` listens for `selectionchange` (plus `mouseup`/`keyup`) on
-every frame of every page. This is the first part of the extension to run
-continuously rather than sitting inert until messaged, so it is the first that
-could plausibly slow a host page down.
+Trimmed in August 2026 to what one user actually uses. Removed on purpose, and not to be
+restored without being asked: the inline trigger pill and its `selectionchange` watcher, the
+right-click menu and the `contextMenus` permission, five of the seven actions, the adjust
+drawer, the popup's Playground and Info tabs, and the creativity/response-limit/streaming
+controls (their values remain in the settings schema).
 
-The hot path is deliberately cheap — it bails before touching the DOM unless the
-selection is inside an editable field, and coalesces into one animation frame so a
-drag-select does not queue a measurement per `mousemove`. But **Notion and Google
-Docs have not been tried.** Watch for typing lag and console noise there.
+Two consequences worth knowing:
+
+- **The old performance risk is gone rather than solved.** The `selectionchange` watcher was
+  the only code running continuously on every page, and it was never tested on Notion or
+  Google Docs. It no longer exists, so the question is moot — but if an inline trigger is ever
+  wanted again, that question comes back with it.
+- **`Ctrl+Shift+D` is now the only way in.** If the shortcut is unbound or captured by the
+  page, the extension has no other entry point at all. It can be rebound at
+  `chrome://extensions/shortcuts`, and the popup shows the live binding.
+
+## The model ratings are a heuristic
+
+The `n/10` in the model dropdown is read off the model's **name** — parameter counts, tier
+words like `opus`/`flash`/`mini`, version numbers — and normalised across whatever list is on
+screen. There is no API that reports how good a model is, so this is a guess with an
+ordering, presented as a rough guide in the UI.
+
+It will be wrong about some models. It knows nothing about a name it cannot parse and shows
+`—` rather than inventing a number, and a name whose family it does not recognise gets no
+tier signal at all. `groq/compound` is a real example of both.
 
 ## Store screenshots show a UI that no longer exists
 

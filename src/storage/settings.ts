@@ -58,6 +58,12 @@ export const settingsSchema = z.object({
       'Must be an https URL, or an http URL on localhost.',
     ),
   translateLanguage: z.string().min(1),
+  /**
+   * The tab the card was last on, so the shortcut reopens where you left off.
+   * Written by the stream handler whenever a rewrite runs, which is also what
+   * switching tabs in the card does.
+   */
+  lastAction: z.enum(['improve', 'translate']),
 });
 
 /** Inferred TypeScript type from the Zod schema */

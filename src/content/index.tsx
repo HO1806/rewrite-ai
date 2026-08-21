@@ -5,6 +5,11 @@
  * mount → unmount → remount cycle double-invoked the effect that starts a
  * rewrite, producing two billed provider calls per card and two ports whose
  * handlers interleaved their output into one string.
+ *
+ * This script is inert until the worker messages it. It used to register a
+ * `selectionchange` watcher for the inline trigger, which made it the one part
+ * of the extension running continuously on every page of every site; the
+ * shortcut is now the only way in, so it listens for nothing else.
  */
 
 import { backgroundToContentMessageSchema } from '@/background/messages';
@@ -12,8 +17,7 @@ import { RewriteCard } from './components/RewriteCard';
 import { applySurfaceTheme, mountSurface } from './mount';
 import { getEditableSelectionInfo } from './selection';
 import { loadResolvedTheme } from './theme';
-import { hideInlineTrigger, registerInlineTrigger } from './trigger';
-import type { RewriteAction, SelectionInfo } from '@/shared/types';
+import type { RewriteAction } from '@/shared/types';
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const parsed = backgroundToContentMessageSchema.safeParse(message);
@@ -31,7 +35,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   try {
-    openCardFromSelection(parsed.data.action);
+    openCardFromSelection(parsed.data.action, parsed.data.language);
     sendResponse({ status: 'ok' });
   } catch (err: unknown) {
     console.warn('[Rewrite AI] Could not open the rewrite card:', err);
@@ -42,34 +46,36 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-// The inline offer, Edge's defining interaction.
-registerInlineTrigger((selectionInfo) => openCard('improve', selectionInfo));
-
 /**
  * Open the card for whatever is selected now.
  *
- * The context menu passes its own `selectionText`, but it is not used as a
- * fallback any more: without a live, measurable selection there is nothing to
- * write back into, and a card that cannot apply its result is worse than no card.
+ * Without a live, measurable selection there is nothing to write a result back
+ * into, and a card that cannot apply its result is worse than no card.
  */
-function openCardFromSelection(action: RewriteAction): void {
+function openCardFromSelection(action: RewriteAction, language: string): void {
   const selectionInfo = getEditableSelectionInfo();
   if (!selectionInfo) return;
-
-  openCard(action, selectionInfo);
-}
-
-function openCard(action: RewriteAction, selectionInfo: SelectionInfo): void {
-  hideInlineTrigger();
 
   mountSurface('card', (close) => (
     <RewriteCard
       selectionInfo={selectionInfo}
       initialAction={action}
+      initialLanguage={language}
       onClose={close}
+      onLanguageChange={saveLanguage}
     />
   ));
 
   // Theme is applied after mount so the card does not flash the wrong palette.
   void loadResolvedTheme().then((theme) => applySurfaceTheme('card', theme));
+}
+
+/** Hands the chosen language to the worker, which owns settings storage. */
+function saveLanguage(language: string): void {
+  void chrome.runtime
+    .sendMessage({ type: 'SET_LANGUAGE', language })
+    .catch(() => {
+      // The card still uses the new language for this session; only the
+      // preference is lost, and that is not worth interrupting a rewrite for.
+    });
 }

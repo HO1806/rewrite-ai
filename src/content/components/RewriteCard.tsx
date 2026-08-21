@@ -1,17 +1,14 @@
 /**
  * The floating rewrite card.
  *
- * Visual direction follows Microsoft Edge's Rewrite panel. This file was 585
- * lines with about half of it JSX and a quarter inline style declarations; the
- * markup now lives in focused child components and the styling in card.css.
+ * Two modes behind two tabs, Rewrite and Translate. The adjust drawer that used
+ * to sit here — tone, format and length pills — was removed along with the
+ * right-click actions it duplicated; the tabs occupy that space now, and are the
+ * only way to reach Translate since the shortcut is the sole entry point.
  */
 
 import { useEffect, useId, useRef, useState } from 'react';
-import type {
-  AdjustParams,
-  RewriteAction,
-  SelectionInfo,
-} from '@/shared/types';
+import type { RewriteAction, SelectionInfo } from '@/shared/types';
 import { useStreamingRewrite } from '@/ui/hooks/useStreamingRewrite';
 import { useTimedFlag } from '@/ui/hooks/useTimedFlag';
 import {
@@ -25,10 +22,10 @@ import {
   useDismissOnOutsidePointer,
 } from '../hooks/useCardKeyboard';
 import { useFocusTrap } from '../hooks/useFocusTrap';
-import { AdjustDrawer } from './AdjustDrawer';
-import { countAdjustments } from './adjustCategories';
 import { CardActionBar } from './CardActionBar';
 import { CardHeader } from './CardHeader';
+import { CardTabs } from './CardTabs';
+import { LanguagePicker } from './LanguagePicker';
 import { StreamOutput } from './StreamOutput';
 
 const CLOSE_DELAY_MS = 400;
@@ -37,17 +34,23 @@ const COPIED_DURATION_MS = 2000;
 interface RewriteCardProps {
   selectionInfo: SelectionInfo;
   initialAction: RewriteAction;
+  /** The stored translation language, resolved before the card mounts. */
+  initialLanguage: string;
   onClose: () => void;
+  /** Persists a language chosen from the gear. */
+  onLanguageChange: (language: string) => void;
 }
 
 export function RewriteCard({
   selectionInfo,
   initialAction,
+  initialLanguage,
   onClose,
+  onLanguageChange,
 }: RewriteCardProps) {
-  const [action] = useState<RewriteAction>(initialAction);
-  const [adjustParams, setAdjustParams] = useState<AdjustParams>({});
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [action, setAction] = useState<RewriteAction>(initialAction);
+  const [language, setLanguage] = useState(initialLanguage);
+  const [isLanguageOpen, setIsLanguageOpen] = useState(false);
   const [outcome, setOutcome] = useState<ReplaceOutcome | null>(null);
   const [isCopied, flagCopied] = useTimedFlag(COPIED_DURATION_MS);
 
@@ -81,7 +84,7 @@ export function RewriteCard({
 
   const handleReplace = async () => {
     /**
-     * Replacement now yields to the event loop — an editor that keeps its own
+     * Replacement yields to the event loop — an editor that keeps its own
      * selection has to observe ours before the edit is offered — so a second
      * click can land mid-flight and insert the text twice.
      */
@@ -109,15 +112,28 @@ export function RewriteCard({
     if (await copyToClipboard(text)) flagCopied();
   };
 
-  const handleAdjust = (next: AdjustParams) => {
-    setAdjustParams(next);
+  /** Switching tab re-runs the same selection through the other action. */
+  const handleSelectTab = (next: RewriteAction) => {
+    if (next === action) return;
+    setAction(next);
+    setIsLanguageOpen(false);
     setOutcome(null);
-    start({ action, text: selectionInfo.text, adjustParams: next });
+    start({ action: next, text: selectionInfo.text });
+  };
+
+  const handleLanguageChange = (next: string) => {
+    setLanguage(next);
+    setIsLanguageOpen(false);
+    onLanguageChange(next);
+    setOutcome(null);
+    // The stored language is what the worker reads when building the prompt, so
+    // the re-run has to wait for the write rather than race it.
+    start({ action: 'translate', text: selectionInfo.text });
   };
 
   const handleRegenerate = () => {
     setOutcome(null);
-    start({ action, text: selectionInfo.text, adjustParams: adjustParams });
+    start({ action, text: selectionInfo.text });
   };
 
   useCardKeyboard({
@@ -141,25 +157,27 @@ export function RewriteCard({
     >
       <CardHeader action={action} titleId={titleId} onClose={onClose} />
 
-      <StreamOutput text={text} isGenerating={isGenerating} error={error} />
+      <CardTabs
+        action={action}
+        language={language}
+        isBusy={isGenerating}
+        onSelect={handleSelectTab}
+        onOpenLanguages={() => setIsLanguageOpen((open) => !open)}
+        isLanguageOpen={isLanguageOpen}
+      />
 
-      {isDrawerOpen && (
-        <AdjustDrawer
-          params={adjustParams}
-          isDisabled={isGenerating}
-          onChange={handleAdjust}
-        />
+      {isLanguageOpen && (
+        <LanguagePicker language={language} onChange={handleLanguageChange} />
       )}
+
+      <StreamOutput text={text} isGenerating={isGenerating} error={error} />
 
       <CardActionBar
         canAct={canAct}
         isGenerating={isGenerating}
-        isDrawerOpen={isDrawerOpen}
-        adjustCount={countAdjustments(adjustParams)}
         lastOutcome={outcome}
         isCopied={isCopied}
         onReplace={() => void handleReplace()}
-        onToggleDrawer={() => setIsDrawerOpen((open) => !open)}
         onRegenerate={handleRegenerate}
         onCopy={() => void handleCopy()}
       />

@@ -27,7 +27,6 @@
 
 import type { RewriteAction } from '@/shared/types';
 import { getAction } from '@/shared/constants';
-import { collectAdjustments } from './adjustments';
 import { PROMPTS } from './definitions';
 import {
   PromptOptions,
@@ -95,7 +94,6 @@ export function assemblePrompt(
       tag,
       verb,
       objective: resolveObjective(definition, options),
-      requirements: collectAdjustments(options),
     }),
     tag,
     body,
@@ -110,7 +108,6 @@ interface UserTurnParts {
   readonly tag: string;
   readonly verb: { imperative: string; past: string };
   readonly objective: string;
-  readonly requirements: readonly string[];
 }
 
 function buildUserTurn({
@@ -119,7 +116,6 @@ function buildUserTurn({
   tag,
   verb,
   objective,
-  requirements,
 }: UserTurnParts): string {
   /**
    * The task is named, not referred to. "According to your instructions" is a
@@ -136,10 +132,6 @@ function buildUserTurn({
     '',
     `Objective: ${objective}`,
   ];
-
-  if (requirements.length > 0) {
-    lines.push('Requirements:', ...requirements.map((line) => `- ${line}`));
-  }
 
   lines.push(
     '',

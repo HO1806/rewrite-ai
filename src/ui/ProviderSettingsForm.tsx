@@ -8,12 +8,20 @@
  * whether switching provider should clear a configured base URL. That last
  * disagreement was a credential-leak path: the popup preserved a custom base URL
  * across a switch to OpenAI, so the OpenAI key went to the custom host.
+ *
+ * Creativity, response limit and the streaming toggle used to live here too.
+ * They keep their values in the settings schema — nothing about the requests
+ * changed — but they were controls this user never touched, and every one of
+ * them is a way to make the extension worse by accident. The translation
+ * language moved to the gear on the card's Translate tab, where it is actually
+ * used.
  */
 
 import { useState } from 'react';
 import { PROVIDERS, getProvider } from '@/shared/constants';
 import type { ProviderType } from '@/shared/types';
 import { Settings, isAllowedBaseUrl } from '@/storage/settings';
+import { rateModels } from '@/shared/modelRating';
 import { useProviderModels } from './hooks/useProviderModels';
 
 interface ProviderSettingsFormProps {
@@ -31,9 +39,22 @@ export function ProviderSettingsForm({
   const [isKeyVisible, setIsKeyVisible] = useState(false);
   const descriptor = getProvider(settings.provider);
   const { models, isLoading, error, load } = useProviderModels(settings);
+  const [isCustomModel, setIsCustomModel] = useState(false);
+
   // The provider's own catalogue when we have it; the bundled list is only ever
   // a guess about a world that changes without telling us.
   const offered = models ?? descriptor.models;
+
+  /**
+   * Rated strongest-first, with whatever is currently set guaranteed to appear.
+   *
+   * A stored model missing from the list would otherwise make the `<select>`
+   * show the first option while storage said something else — the control would
+   * be quietly lying about the setting it represents.
+   */
+  const rated = rateModels(
+    offered.includes(settings.model) ? offered : [settings.model, ...offered],
+  );
   const isBaseUrlValid = isAllowedBaseUrl(settings.baseUrl);
 
   /**
@@ -145,26 +166,31 @@ export function ProviderSettingsForm({
         <label className="field__label" htmlFor="model">
           Model
         </label>
-        <input
-          id="model"
-          className="input"
-          value={settings.model}
-          spellCheck={false}
-          onChange={(event) => onChange({ model: event.target.value })}
-        />
-        <div className="chips">
-          {offered.map((model) => (
-            <button
-              type="button"
-              key={model}
-              className="chip"
-              aria-pressed={settings.model === model}
-              onClick={() => onChange({ model })}
-            >
-              {model}
-            </button>
-          ))}
-        </div>
+
+        {isCustomModel ? (
+          <input
+            id="model"
+            className="input"
+            value={settings.model}
+            spellCheck={false}
+            autoFocus
+            onChange={(event) => onChange({ model: event.target.value })}
+          />
+        ) : (
+          <select
+            id="model"
+            className="select"
+            value={settings.model}
+            onChange={(event) => onChange({ model: event.target.value })}
+          >
+            {rated.map(({ id, rating }) => (
+              <option key={id} value={id}>
+                {rating === null ? '—' : `${rating}/10`} · {id}
+              </option>
+            ))}
+          </select>
+        )}
+
         <div className="row">
           <button
             type="button"
@@ -174,12 +200,23 @@ export function ProviderSettingsForm({
           >
             {isLoading ? 'Loading models…' : 'Load models'}
           </button>
-          <span className="field__hint">
-            {models
-              ? `${models.length} from ${descriptor.label}`
-              : 'Ask the provider what this key can use'}
-          </span>
+          <button
+            type="button"
+            className="button button--subtle"
+            onClick={() => setIsCustomModel((custom) => !custom)}
+          >
+            {isCustomModel ? 'Choose from list' : 'Type an id'}
+          </button>
         </div>
+
+        <span className="field__hint">
+          {models
+            ? `${models.length} from ${descriptor.label}. `
+            : 'Ask the provider what this key can use. '}
+          Ratings compare these models with each other — a rough guide from the
+          model names, not a benchmark.
+        </span>
+
         {error && (
           <span className="field__error" role="alert">
             {error}
@@ -187,95 +224,25 @@ export function ProviderSettingsForm({
         )}
       </div>
 
-      <div className="field">
-        <label className="field__label" htmlFor="temperature">
-          Creativity
-        </label>
-        <div className="range-row">
-          <input
-            id="temperature"
-            type="range"
-            min={0}
-            max={2}
-            step={0.05}
-            value={settings.temperature}
-            onChange={(event) =>
-              onChange({ temperature: Number(event.target.value) })
-            }
-          />
-          <span className="range-row__value">
-            {settings.temperature.toFixed(2)}
-          </span>
-        </div>
-        <span className="field__hint">
-          Lower is more literal, higher is more inventive.
-        </span>
-      </div>
-
       {variant === 'full' && (
-        <>
-          <div className="field">
-            <label className="field__label" htmlFor="max-tokens">
-              Response limit (tokens)
-            </label>
-            <input
-              id="max-tokens"
-              className="input"
-              type="number"
-              min={1}
-              max={128000}
-              value={settings.maxTokens}
-              onChange={(event) =>
-                onChange({ maxTokens: Number(event.target.value) })
-              }
-            />
-          </div>
-
-          <div className="field">
-            <label className="field__label" htmlFor="translate-language">
-              Translate into
-            </label>
-            <input
-              id="translate-language"
-              className="input"
-              value={settings.translateLanguage}
-              onChange={(event) =>
-                onChange({ translateLanguage: event.target.value })
-              }
-            />
-          </div>
-
-          <div className="field">
-            <label className="field__label" htmlFor="theme">
-              Appearance
-            </label>
-            <select
-              id="theme"
-              className="select"
-              value={settings.theme}
-              onChange={(event) =>
-                onChange({ theme: event.target.value as Settings['theme'] })
-              }
-            >
-              <option value="system">Match system</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </div>
-        </>
+        <div className="field">
+          <label className="field__label" htmlFor="theme">
+            Appearance
+          </label>
+          <select
+            id="theme"
+            className="select"
+            value={settings.theme}
+            onChange={(event) =>
+              onChange({ theme: event.target.value as Settings['theme'] })
+            }
+          >
+            <option value="system">Match system</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
       )}
-
-      <label className="checkbox-row">
-        <input
-          type="checkbox"
-          checked={settings.stream}
-          onChange={(event) => onChange({ stream: event.target.checked })}
-        />
-        <span className="checkbox-row__text">
-          <span>Stream the response</span>
-          <span className="field__hint">Show text as it is generated.</span>
-        </span>
-      </label>
     </>
   );
 }

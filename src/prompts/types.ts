@@ -1,7 +1,10 @@
-import type { AdjustParams } from '@/shared/types';
-
-/** Options available to a prompt when building its instruction. */
-export interface PromptOptions extends AdjustParams {
+/**
+ * Options available to a prompt when building its instruction.
+ *
+ * Only the translate target remains. It used to extend `AdjustParams` — tone,
+ * format and length from the adjust drawer, which has been removed.
+ */
+export interface PromptOptions {
   /** Target language, used by the translate prompt. */
   language?: string;
 }

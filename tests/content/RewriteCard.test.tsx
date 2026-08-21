@@ -76,6 +76,8 @@ describe('RewriteCard', () => {
       <RewriteCard
         selectionInfo={selectionIn(textarea)}
         initialAction="improve"
+        initialLanguage="English"
+        onLanguageChange={vi.fn()}
         onClose={vi.fn()}
       />,
     );
@@ -94,6 +96,8 @@ describe('RewriteCard', () => {
       <RewriteCard
         selectionInfo={selectionIn(textarea)}
         initialAction="improve"
+        initialLanguage="English"
+        onLanguageChange={vi.fn()}
         onClose={vi.fn()}
       />,
     );
@@ -112,6 +116,8 @@ describe('RewriteCard', () => {
       <RewriteCard
         selectionInfo={selectionIn(textarea)}
         initialAction="translate"
+        initialLanguage="English"
+        onLanguageChange={vi.fn()}
         onClose={vi.fn()}
       />,
     );
@@ -132,6 +138,8 @@ describe('RewriteCard', () => {
       <RewriteCard
         selectionInfo={selectionIn(textarea)}
         initialAction="improve"
+        initialLanguage="English"
+        onLanguageChange={vi.fn()}
         onClose={vi.fn()}
       />,
     );
@@ -150,6 +158,8 @@ describe('RewriteCard', () => {
       <RewriteCard
         selectionInfo={selectionIn(textarea)}
         initialAction="improve"
+        initialLanguage="English"
+        onLanguageChange={vi.fn()}
         onClose={vi.fn()}
       />,
     );
@@ -170,6 +180,8 @@ describe('RewriteCard', () => {
       <RewriteCard
         selectionInfo={selectionIn(textarea)}
         initialAction="improve"
+        initialLanguage="English"
+        onLanguageChange={vi.fn()}
         onClose={vi.fn()}
       />,
     );
@@ -212,6 +224,8 @@ describe('RewriteCard', () => {
           selectionEnd: null,
         }}
         initialAction="improve"
+        initialLanguage="English"
+        onLanguageChange={vi.fn()}
         onClose={onClose}
       />,
     );
@@ -243,6 +257,8 @@ describe('RewriteCard', () => {
       <RewriteCard
         selectionInfo={selectionIn(textarea)}
         initialAction="improve"
+        initialLanguage="English"
+        onLanguageChange={vi.fn()}
         onClose={vi.fn()}
       />,
     );
@@ -268,6 +284,8 @@ describe('RewriteCard', () => {
       <RewriteCard
         selectionInfo={selectionIn(textarea)}
         initialAction="improve"
+        initialLanguage="English"
+        onLanguageChange={vi.fn()}
         onClose={onClose}
       />,
     );
@@ -286,6 +304,8 @@ describe('RewriteCard', () => {
       <RewriteCard
         selectionInfo={selectionIn(textarea)}
         initialAction="improve"
+        initialLanguage="English"
+        onLanguageChange={vi.fn()}
         onClose={onClose}
       />,
     );
@@ -294,113 +314,85 @@ describe('RewriteCard', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  describe('adjust drawer', () => {
-    async function openDrawer(): Promise<void> {
+  /**
+   * The two tabs replaced the adjust drawer, and are the only way to reach
+   * Translate now that the right-click menu is gone.
+   */
+  describe('the mode tabs', () => {
+    async function renderCard(
+      onLanguageChange = vi.fn(),
+    ): Promise<HTMLTextAreaElement> {
       const textarea = mountTextarea();
       render(
         <RewriteCard
           selectionInfo={selectionIn(textarea)}
           initialAction="improve"
+          initialLanguage="English"
+          onLanguageChange={onLanguageChange}
           onClose={vi.fn()}
         />,
       );
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: /Adjust/ })).toBeEnabled(),
-      );
-      await userEvent.click(screen.getByRole('button', { name: /Adjust/ }));
+      return textarea;
     }
 
-    it('exposes tone, format and length as tabs', async () => {
+    it('offers Rewrite and Translate', async () => {
       await seedSettings();
-      stubFetch([sseResponse(frames('x'))]);
-      await openDrawer();
+      stubFetch([sseResponse(frames('ok'))]);
+      await renderCard();
 
-      const tablist = screen.getByRole('tablist', {
-        name: /Adjust the rewrite/,
-      });
-      expect(within(tablist).getAllByRole('tab')).toHaveLength(3);
-    });
-
-    /**
-     * The pill labelled "Funny" used to send the `neutral` tone, instructing the
-     * model to be neutral and objective — the opposite of the label.
-     */
-    it('asks the model for humour when Funny is chosen', async () => {
-      await seedSettings();
-      const calls = stubFetchEach(() => sseResponse(frames('ha')));
-      await openDrawer();
-
-      await userEvent.click(screen.getByRole('button', { name: /Funny/ }));
-
-      await waitFor(() => expect(calls.length).toBeGreaterThan(1));
-      const body = String(calls[calls.length - 1]!.init.body);
-      expect(body).toMatch(/humorous/i);
-      expect(body).not.toMatch(/neutral and objective/i);
-    });
-
-    it('counts the adjustments applied', async () => {
-      await seedSettings();
-      stubFetch([sseResponse(frames('x'))]);
-      await openDrawer();
-
-      await userEvent.click(
-        screen.getByRole('button', { name: /Professional/ }),
-      );
-
-      await waitFor(() =>
-        expect(
-          screen.getByRole('button', { name: /Adjust/ }),
-        ).toHaveTextContent('1'),
-      );
-    });
-
-    it('toggles a selected option back off', async () => {
-      await seedSettings();
-      stubFetch([sseResponse(frames('x'))]);
-      await openDrawer();
-
-      const pill = screen.getByRole('button', { name: /Casual/ });
-      await userEvent.click(pill);
-      await waitFor(() => expect(pill).toHaveAttribute('aria-pressed', 'true'));
-
-      await userEvent.click(pill);
-      await waitFor(() =>
-        expect(pill).toHaveAttribute('aria-pressed', 'false'),
-      );
-    });
-
-    /** Clicking a pill mid-stream used to crash the service worker. */
-    it('survives an adjustment chosen while a stream is running', async () => {
-      await seedSettings();
-      // A fresh body per call, since each adjustment supersedes the last request.
-      stubFetchEach(() => sseResponse(frames('revised')));
-      await openDrawer();
-
-      await userEvent.click(
-        screen.getByRole('button', { name: /Enthusiastic/ }),
-      );
-      await userEvent.click(screen.getByRole('button', { name: /Casual/ }));
-
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: /^Replace$/ })).toBeEnabled(),
-      );
-      expect(screen.queryByRole('alert')).toBeNull();
-    });
-
-    it('switches category with the arrow keys', async () => {
-      await seedSettings();
-      stubFetch([sseResponse(frames('x'))]);
-      await openDrawer();
-
-      const tablist = screen.getByRole('tablist', {
-        name: /Adjust the rewrite/,
-      });
-      await userEvent.click(within(tablist).getByRole('tab', { name: /Tone/ }));
-      await userEvent.keyboard('{ArrowRight}');
-
+      const tablist = await screen.findByRole('tablist', { name: /Mode/i });
       expect(
-        within(tablist).getByRole('tab', { name: /Format/ }),
+        within(tablist).getByRole('tab', { name: /Rewrite/ }),
       ).toHaveAttribute('aria-selected', 'true');
+      expect(
+        within(tablist).getByRole('tab', { name: /Translate/ }),
+      ).toBeInTheDocument();
+    });
+
+    it('re-runs the same selection through the other action', async () => {
+      await seedSettings();
+      const calls = stubFetchEach(() => sseResponse(frames('ok')));
+      await renderCard();
+
+      await waitFor(() => expect(calls).toHaveLength(1));
+      await userEvent.click(screen.getByRole('tab', { name: /Translate/ }));
+
+      await waitFor(() => expect(calls).toHaveLength(2));
+      const body = String(calls[1]!.init.body);
+      expect(body).toContain('Task: Translate.');
+    });
+
+    /** The gear belongs to Translate; on Rewrite it would do nothing. */
+    it('shows the language gear only on the Translate tab', async () => {
+      await seedSettings();
+      stubFetchEach(() => sseResponse(frames('ok')));
+      await renderCard();
+
+      expect(screen.queryByRole('button', { name: /Language/i })).toBeNull();
+
+      await userEvent.click(screen.getByRole('tab', { name: /Translate/ }));
+      expect(
+        await screen.findByRole('button', { name: /Language: English/i }),
+      ).toBeInTheDocument();
+    });
+
+    it('picks a language, persists it and translates again', async () => {
+      await seedSettings();
+      const calls = stubFetchEach(() => sseResponse(frames('ok')));
+      const onLanguageChange = vi.fn();
+      await renderCard(onLanguageChange);
+
+      await userEvent.click(screen.getByRole('tab', { name: /Translate/ }));
+      await userEvent.click(
+        await screen.findByRole('button', { name: /Language: English/i }),
+      );
+      await userEvent.selectOptions(
+        await screen.findByLabelText(/Translate into/i),
+        'German',
+      );
+
+      expect(onLanguageChange).toHaveBeenCalledWith('German');
+      await waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(3));
     });
   });
 
@@ -413,6 +405,8 @@ describe('RewriteCard', () => {
       <RewriteCard
         selectionInfo={selectionIn(textarea)}
         initialAction="improve"
+        initialLanguage="English"
+        onLanguageChange={vi.fn()}
         onClose={vi.fn()}
       />,
     );

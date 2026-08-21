@@ -1,16 +1,15 @@
 /**
  * Shadow DOM containers for the extension's in-page surfaces.
  *
- * Each surface — the floating card, the inline trigger button — gets its own
- * host and its own shadow root, so the host page's styles cannot reach them and
- * theirs cannot leak out. They are separate hosts rather than one shared root
- * because the trigger must stay alive while no card exists, and vanish when one
- * opens.
+ * The card gets its own host and its own shadow root, so the host page's styles
+ * cannot reach it and its own cannot leak out. The registry is still keyed by
+ * surface name: there were two of these, the card and an inline trigger button,
+ * and the trigger has been removed along with every entry point except the
+ * keyboard shortcut.
  */
 
 import tokensCss from '@/styles/tokens.css?inline';
 import cardCss from '@/styles/card.css?inline';
-import triggerCss from '@/styles/trigger.css?inline';
 import { CARD } from '@/shared/constants';
 
 const MOUNT_ID = 'rewrite-ai-mount';
@@ -91,7 +90,6 @@ function createStyleSheet(): HTMLStyleElement {
     }
     ${tokensCss}
     ${cardCss}
-    ${triggerCss}
   `;
   return style;
 }

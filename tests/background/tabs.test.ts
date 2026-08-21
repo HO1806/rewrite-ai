@@ -4,9 +4,9 @@ import type { BackgroundToContentMessage } from '@/shared/types';
 import { chromeMock } from '../setup';
 
 const MESSAGE: BackgroundToContentMessage = {
-  type: 'REWRITE_REQUEST',
+  type: 'TRIGGER_REWRITE',
   action: 'improve',
-  text: 'hello',
+  language: 'English',
 };
 
 describe('sendMessageToTab', () => {
@@ -46,7 +46,7 @@ describe('sendMessageToTab', () => {
       chromeMock.sentTabMessages.map(
         (entry) => (entry.message as { type: string }).type,
       ),
-    ).toEqual(['PING', 'REWRITE_REQUEST']);
+    ).toEqual(['PING', 'TRIGGER_REWRITE']);
   });
 
   /** A retried rewrite could mount duplicate cards, so probing uses PING. */
@@ -56,7 +56,7 @@ describe('sendMessageToTab', () => {
     await sendMessageToTab(7, MESSAGE);
 
     const rewrites = chromeMock.sentTabMessages.filter(
-      (entry) => (entry.message as { type: string }).type === 'REWRITE_REQUEST',
+      (entry) => (entry.message as { type: string }).type === 'TRIGGER_REWRITE',
     );
     expect(rewrites).toHaveLength(1);
   });

@@ -3,7 +3,7 @@
   "name": "Rewrite AI",
   "description": "AI-powered writing improvement. Select text, right-click, improve.",
   "version": "1.0.0",
-  "permissions": ["contextMenus", "storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": [
     "https://api.openai.com/*",
     "https://api.groq.com/*",

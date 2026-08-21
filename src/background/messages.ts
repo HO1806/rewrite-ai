@@ -12,40 +12,23 @@ import { z } from 'zod';
 import { MAX_INPUT_LENGTH } from '@/shared/constants';
 import { settingsSchema } from '@/storage/settings';
 import type {
-  AdjustParams,
   BackgroundToContentMessage,
+  RewriteAction,
   StreamMessage,
   StreamRequest,
 } from '@/shared/types';
 
 export const rewriteActionSchema = z.enum([
   'improve',
-  'grammar',
-  'professional',
-  'friendly',
-  'concise',
-  'expand',
   'translate',
-]);
-
-export const adjustParamsSchema = z.object({
-  tone: z
-    .enum(['professional', 'casual', 'enthusiastic', 'informational', 'funny'])
-    .optional(),
-  format: z.enum(['paragraph', 'email', 'ideas', 'blog']).optional(),
-  length: z.enum(['short', 'medium', 'long']).optional(),
-}) satisfies z.ZodType<AdjustParams>;
+]) satisfies z.ZodType<RewriteAction>;
 
 /** background → content */
 export const backgroundToContentMessageSchema = z.discriminatedUnion('type', [
   z.object({
-    type: z.literal('REWRITE_REQUEST'),
-    action: rewriteActionSchema,
-    text: z.string(),
-  }),
-  z.object({
     type: z.literal('TRIGGER_REWRITE'),
     action: rewriteActionSchema,
+    language: z.string().min(1),
   }),
   /**
    * Readiness probe. The worker polls this after injecting the content script,
@@ -68,7 +51,6 @@ export const streamRequestSchema = z.object({
   type: z.literal('START_REWRITE'),
   action: rewriteActionSchema,
   text: z.string().min(1).max(MAX_INPUT_LENGTH),
-  adjustParams: adjustParamsSchema.optional(),
 }) satisfies z.ZodType<StreamRequest>;
 
 /**
@@ -81,6 +63,17 @@ export const streamRequestSchema = z.object({
  */
 export const themeRequestSchema = z.object({
   type: z.literal('GET_THEME'),
+});
+
+/**
+ * content → background: persist a language chosen from the card's gear.
+ *
+ * A write rather than a read, but the same reasoning — the content script hands
+ * over one harmless field instead of touching the settings object.
+ */
+export const setLanguageRequestSchema = z.object({
+  type: z.literal('SET_LANGUAGE'),
+  language: z.string().min(1).max(60),
 });
 
 export const themeResponseSchema = z.object({

@@ -7,7 +7,7 @@
  * couple of thousand pixels down the extension appeared to do nothing at all.
  */
 
-import { CARD, TRIGGER } from '@/shared/constants';
+import { CARD } from '@/shared/constants';
 import type { CardPosition, SelectionInfo } from '@/shared/types';
 
 /**
@@ -136,11 +136,6 @@ export function positionBelow(
     height,
     offset: CARD.offset,
   });
-}
-
-/** Place the inline trigger button just below the selection. */
-export function positionTrigger(rect: DOMRect): CardPosition {
-  return positionAnchored(rect, TRIGGER);
 }
 
 interface AnchorSize {

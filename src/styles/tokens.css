@@ -170,4 +170,18 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+
+  /*
+   * The spinner needs replacing, not stopping.
+   *
+   * Zeroing its duration left a ring frozen mid-rotation that reads as a broken
+   * image rather than as progress, so under reduced motion it becomes a static
+   * ring that pulses opacity — motion-free, and still visibly "working".
+   */
+  .card__spinner,
+  .spinner {
+    animation: none !important;
+    border-top-color: currentColor;
+    opacity: 0.55;
+  }
 }

@@ -5,41 +5,40 @@
  * assume state survives between events: MV3 terminates the worker when idle.
  */
 
-import { ACTIONS } from '@/shared/constants';
-import type { BackgroundToContentMessage, RewriteAction } from '@/shared/types';
-import { registerContextMenus } from './contextMenus';
+import { loadSettings } from '@/storage/settings';
+import type { BackgroundToContentMessage } from '@/shared/types';
 import { registerStreamHandler } from './streamHandler';
 import { registerModelsBridge } from './modelsBridge';
-import { registerThemeBridge } from './themeBridge';
+import { registerLanguageBridge, registerThemeBridge } from './themeBridge';
 import { SendOptions, describeDeliveryFailure, sendMessageToTab } from './tabs';
 
-registerContextMenus();
 registerStreamHandler();
 registerThemeBridge();
+registerLanguageBridge();
 registerModelsBridge();
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (!tab?.id || !info.selectionText) return;
-
-  const action = toRewriteAction(info.menuItemId);
-  if (!action) return;
-
-  // Deliver to the frame the selection is actually in. Broadcasting to the tab
-  // means every frame receives it, and each frame without a selection opens its
-  // own card and bills its own request — nine of them on an ad-heavy page.
-  void deliver(
-    tab.id,
-    { type: 'REWRITE_REQUEST', action, text: info.selectionText },
-    { frameId: info.frameId },
-  );
-});
-
+/**
+ * The one entry point.
+ *
+ * The inline trigger and the right-click menu both existed and were both
+ * removed: this user drives the extension entirely from a mouse macro bound to
+ * the shortcut. The action is whichever tab the card was last on, so pressing it
+ * reopens where they left off.
+ */
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command !== 'improve-writing' || !tab?.id) return;
 
-  // A command carries no frame id. Broadcasting is safe here because
-  // TRIGGER_REWRITE has no text, so a frame with no live selection does nothing.
-  void deliver(tab.id, { type: 'TRIGGER_REWRITE', action: 'improve' });
+  const tabId = tab.id;
+  void loadSettings().then((settings) =>
+    // A command carries no frame id. Broadcasting is safe because
+    // TRIGGER_REWRITE has no text, so a frame with no live selection does
+    // nothing at all.
+    deliver(tabId, {
+      type: 'TRIGGER_REWRITE',
+      action: settings.lastAction,
+      language: settings.translateLanguage,
+    }),
+  );
 });
 
 async function deliver(
@@ -53,10 +52,4 @@ async function deliver(
       `[Rewrite AI] ${describeDeliveryFailure(result)} (${result.detail})`,
     );
   }
-}
-
-/** `menuItemId` is typed `string | number`, so it is checked rather than cast. */
-function toRewriteAction(menuItemId: string | number): RewriteAction | null {
-  const match = ACTIONS.find((action) => action.id === menuItemId);
-  return match ? match.id : null;
 }

@@ -2,15 +2,15 @@
  * Shared type definitions used across the extension.
  */
 
-/** All available rewrite actions */
-export type RewriteAction =
-  | 'improve'
-  | 'grammar'
-  | 'professional'
-  | 'friendly'
-  | 'concise'
-  | 'expand'
-  | 'translate';
+/**
+ * The two things this extension does.
+ *
+ * It offered seven, six of which were only ever reachable from a right-click
+ * menu that has now been removed — the keyboard shortcut is the sole entry
+ * point. Fix Grammar is not missing but merged: `improve` corrects when
+ * correcting is all the text needs, and rewrites when it needs more.
+ */
+export type RewriteAction = 'improve' | 'translate';
 
 /** Supported AI providers */
 export type ProviderType =
@@ -55,14 +55,23 @@ export interface SelectionInfo {
  * Messages sent from background → content script.
  */
 export type BackgroundToContentMessage =
-  | {
-      type: 'REWRITE_REQUEST';
-      action: RewriteAction;
-      text: string;
-    }
+  /**
+   * Carries no text: the content script reads the live selection itself. The
+   * variant that carried `selectionText` existed for the context menu, which has
+   * been removed, and its text was ignored anyway — without a live, measurable
+   * selection there is nothing to write a result back into.
+   */
   | {
       type: 'TRIGGER_REWRITE';
       action: RewriteAction;
+      /**
+       * The stored translation language, sent along rather than looked up.
+       *
+       * The worker already loads settings here to decide the action, and the
+       * content script must not read that object itself — it holds the API key,
+       * and it runs in a process shared with the page.
+       */
+      language: string;
     }
   /** Readiness probe; the content script answers immediately. */
   | { type: 'PING' };
@@ -76,29 +85,10 @@ export type StreamMessage =
   | { type: 'ERROR'; message: string };
 
 /**
- * Edge's five tones, verbatim.
- *
- * An earlier pass replaced `informational` with an invented `informal` +
- * `neutral` pair while fixing a mislabelled pill. Edge offers exactly these
- * five, and matching it is the point.
- */
-export type ToneOption =
-  'professional' | 'casual' | 'enthusiastic' | 'informational' | 'funny';
-export type FormatOption = 'paragraph' | 'email' | 'ideas' | 'blog';
-export type LengthOption = 'short' | 'medium' | 'long';
-
-export interface AdjustParams {
-  tone?: ToneOption;
-  format?: FormatOption;
-  length?: LengthOption;
-}
-
-/**
  * Messages sent through the streaming port (content → background).
  */
 export interface StreamRequest {
   type: 'START_REWRITE';
   action: RewriteAction;
   text: string;
-  adjustParams?: AdjustParams;
 }

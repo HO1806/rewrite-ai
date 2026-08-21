@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ACTIONS,
-  FORMAT_OPTIONS,
-  LENGTH_OPTIONS,
   PROVIDERS,
-  TONE_OPTIONS,
+  TRANSLATE_LANGUAGES,
   getAction,
   getDefaultModel,
   getProvider,
@@ -61,24 +59,24 @@ describe('constants', () => {
     expect(() => getProvider('nope' as never)).toThrow(/Unknown provider/);
   });
 
-  it('gives every adjust option a distinct value and a label', () => {
-    for (const group of [TONE_OPTIONS, FORMAT_OPTIONS, LENGTH_OPTIONS]) {
-      const values = group.map((option) => option.value);
-      expect(new Set(values).size).toBe(values.length);
-      for (const option of group)
-        expect(option.label.length).toBeGreaterThan(0);
+  /**
+   * The two actions that remain. Five more existed, reachable only from a
+   * right-click menu that has been removed, and Fix Grammar merged into Rewrite.
+   */
+  it('offers exactly the actions the card has tabs for', () => {
+    expect(ACTIONS.map((action) => action.id)).toEqual([
+      'improve',
+      'translate',
+    ]);
+    for (const action of ACTIONS) {
+      expect(action.label.length).toBeGreaterThan(0);
+      expect(action.cardTitle.length).toBeGreaterThan(0);
     }
   });
 
-  /** The mislabelled pills that sent the opposite instruction. */
-  it('labels each tone as what it actually requests', () => {
-    const byValue = new Map(
-      TONE_OPTIONS.map((option) => [option.value, option.label]),
-    );
-    expect(byValue.get('informational')).toBe('Informational');
-    expect(byValue.get('funny')).toBe('Funny');
-    // Edge offers exactly five; the invented Informal/Neutral pair is gone.
-    expect(TONE_OPTIONS).toHaveLength(5);
+  it('offers translation languages with no duplicates', () => {
+    expect(TRANSLATE_LANGUAGES.length).toBeGreaterThan(3);
+    expect(new Set(TRANSLATE_LANGUAGES).size).toBe(TRANSLATE_LANGUAGES.length);
   });
 });
 

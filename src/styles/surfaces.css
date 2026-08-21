@@ -283,36 +283,6 @@ body {
   background-color: var(--accent-soft);
 }
 
-/* ── Model preset chips ── */
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.chip {
-  padding: 3px var(--space-3);
-  font: inherit;
-  font-size: var(--text-2xs);
-  color: var(--text-secondary);
-  cursor: pointer;
-  background-color: var(--surface-raised);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-pill);
-  transition: all var(--duration-fast) ease;
-}
-
-.chip:hover {
-  border-color: var(--accent);
-}
-
-.chip[aria-pressed='true'] {
-  color: var(--accent-text);
-  background-color: var(--accent-soft);
-  border-color: var(--accent);
-}
-
 /* ── Checkbox row ── */
 
 .checkbox-row {

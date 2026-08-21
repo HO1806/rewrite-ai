@@ -1,15 +1,12 @@
 import type { ReplaceOutcome } from '../replace';
-import { AdjustIcon, RegenerateIcon, ReplaceIcon } from './icons';
+import { RegenerateIcon, ReplaceIcon } from './icons';
 
 interface CardActionBarProps {
   canAct: boolean;
   isGenerating: boolean;
-  isDrawerOpen: boolean;
-  adjustCount: number;
   lastOutcome: ReplaceOutcome | null;
   isCopied: boolean;
   onReplace: () => void;
-  onToggleDrawer: () => void;
   onRegenerate: () => void;
   onCopy: () => void;
 }
@@ -17,12 +14,9 @@ interface CardActionBarProps {
 export function CardActionBar({
   canAct,
   isGenerating,
-  isDrawerOpen,
-  adjustCount,
   lastOutcome,
   isCopied,
   onReplace,
-  onToggleDrawer,
   onRegenerate,
   onCopy,
 }: CardActionBarProps) {
@@ -44,23 +38,6 @@ export function CardActionBar({
           {/* Reports what actually happened. This button used to show
               "Replaced" even when the text had only reached the clipboard. */}
           <span>{replaceLabel(lastOutcome)}</span>
-        </button>
-
-        <button
-          type="button"
-          className={`card__button ${isDrawerOpen ? 'card__button--active' : ''}`}
-          onClick={onToggleDrawer}
-          aria-expanded={isDrawerOpen}
-          title="Adjust tone, format and length"
-        >
-          <AdjustIcon />
-          <span>Adjust</span>
-          {adjustCount > 0 && (
-            <span className="card__count">
-              {adjustCount}
-              <span className="sr-only"> adjustments applied</span>
-            </span>
-          )}
         </button>
 
         <button

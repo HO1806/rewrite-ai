@@ -10,7 +10,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { STREAM_PORT_NAME } from '@/shared/constants';
 import type {
-  AdjustParams,
   RewriteAction,
   StreamMessage,
   StreamRequest,
@@ -26,7 +25,6 @@ export interface StreamState {
 export interface StartOptions {
   action: RewriteAction;
   text: string;
-  adjustParams?: AdjustParams;
 }
 
 const IDLE: StreamState = { text: '', isGenerating: false, error: null };
@@ -45,7 +43,7 @@ export function useStreamingRewrite(): StreamState & {
   }, []);
 
   const start = useCallback(
-    ({ action, text, adjustParams }: StartOptions) => {
+    ({ action, text }: StartOptions) => {
       // Supersede any request already in flight.
       disconnect();
       setState({ text: '', isGenerating: true, error: null });
@@ -107,12 +105,7 @@ export function useStreamingRewrite(): StreamState & {
           );
         });
 
-        const request: StreamRequest = {
-          type: 'START_REWRITE',
-          action,
-          text,
-          ...(adjustParams ? { adjustParams } : {}),
-        };
+        const request: StreamRequest = { type: 'START_REWRITE', action, text };
         port.postMessage(request);
       } catch (err: unknown) {
         portRef.current = null;
