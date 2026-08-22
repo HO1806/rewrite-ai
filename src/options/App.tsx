@@ -1,4 +1,5 @@
 import { ProviderSettingsForm } from '@/ui/ProviderSettingsForm';
+import { AppMark } from '@/ui/AppMark';
 import { SaveStatus } from '@/ui/SaveStatus';
 import { ShortcutRow } from '@/ui/ShortcutRow';
 import { useAppliedTheme } from '@/ui/hooks/useAppliedTheme';
@@ -21,8 +22,8 @@ export function App() {
     <main className="options">
       <header className="app-header">
         <div className="app-identity">
-          <span className="app-logo" aria-hidden="true">
-            ⚡
+          <span className="app-logo">
+            <AppMark />
           </span>
           <div>
             <h1 className="app-title">Rewrite AI settings</h1>

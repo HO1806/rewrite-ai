@@ -111,6 +111,37 @@ async function selectAllIn(page: Page, id: string): Promise<void> {
  * A form field exposes offsets; a rich editor only has a Range, which is the
  * fragile half of the replacement path — it has to survive the card taking focus.
  */
+/**
+ * Ctrl+Z after a replacement must bring the user's original text back.
+ *
+ * `execCommand('insertText')` is preferred over a raw value assignment
+ * specifically to keep the browser's native undo stack intact, and the
+ * `beforeinput` path hands the edit to the editor's own history — but until
+ * these assertions existed, nobody had ever pressed the key. Recovering from a
+ * rewrite you did not want is the whole reason that matters.
+ *
+ * Focus is restored directly rather than by clicking: the card takes focus when
+ * it opens and undo goes to whatever holds it, but the host fixture also carries
+ * a high z-index overlay for the stacking test, which swallows real clicks.
+ */
+async function expectUndoRestores(
+  page: Page,
+  id: string,
+  original: string,
+): Promise<void> {
+  await page.locator(`#${id}`).focus();
+  await page.keyboard.press('ControlOrMeta+z');
+
+  await expect
+    .poll(() =>
+      page.evaluate((target) => {
+        const el = document.getElementById(target)!;
+        return 'value' in el ? (el as HTMLInputElement).value : el.textContent;
+      }, id),
+    )
+    .toBe(original);
+}
+
 async function selectAllInEditable(page: Page, id: string): Promise<void> {
   await page.evaluate((target) => {
     const el = document.getElementById(target)!;
@@ -595,6 +626,8 @@ test.describe('replacement', () => {
       // Appending rather than replacing was the actual bug.
       const value = await page.locator(`#${field.id}`).inputValue();
       expect(value).not.toContain(field.original);
+
+      await expectUndoRestores(page, field.id, field.original);
     });
   }
 
@@ -624,6 +657,8 @@ test.describe('replacement', () => {
     await expect(page.locator('#ce')).toHaveText(EXPECTED_REWRITE);
     const text = await page.locator('#ce').innerText();
     expect(text).not.toContain(original);
+
+    await expectUndoRestores(page, 'ce', original);
   });
 
   /**
@@ -729,6 +764,18 @@ test.describe('a real Lexical editor', () => {
     expect(dom).toBe(EXPECTED_REWRITE);
     // The reported symptom, asserted directly: "message 1. message 2".
     expect(dom).not.toContain(LEXICAL_ORIGINAL);
+
+    /**
+     * Undo goes through Lexical's own history plugin here, not the browser's
+     * native stack: the edit was offered as a `beforeinput` the editor claimed,
+     * so it is Lexical's to reverse. Asserted against its document for the same
+     * reason the substitution is.
+     */
+    await page.locator('#editor').focus();
+    await page.keyboard.press('ControlOrMeta+z');
+    await expect
+      .poll(() => page.evaluate(() => window.__lexicalText?.() ?? ''))
+      .toBe(LEXICAL_ORIGINAL);
   });
 });
 

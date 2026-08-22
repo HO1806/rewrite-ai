@@ -6,6 +6,7 @@
  * it showed — the live shortcut — belongs beside the settings it applies to.
  */
 
+import { AppMark } from '@/ui/AppMark';
 import { SaveStatus } from '@/ui/SaveStatus';
 import { useSettings } from '@/ui/hooks/useSettings';
 import { useAppliedTheme } from '@/ui/hooks/useAppliedTheme';
@@ -26,8 +27,8 @@ export function App() {
     <div className="popup">
       <header className="app-header">
         <div className="app-identity">
-          <span className="app-logo" aria-hidden="true">
-            ⚡
+          <span className="app-logo">
+            <AppMark />
           </span>
           <div>
             <h1 className="app-title">Rewrite AI</h1>

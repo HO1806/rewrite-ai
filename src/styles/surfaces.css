@@ -75,7 +75,8 @@ body {
   place-items: center;
   width: 1.75rem;
   height: 1.75rem;
-  font-size: var(--text-md);
+  /* The mark inside is an SVG drawn with `currentColor`. */
+  color: var(--text-on-accent);
   border-radius: var(--radius-lg);
   background: linear-gradient(
     135deg,

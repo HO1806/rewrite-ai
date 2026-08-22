@@ -1,5 +1,5 @@
 import type { ReplaceOutcome } from '../replace';
-import { RegenerateIcon, ReplaceIcon } from './icons';
+import { CheckIcon, RegenerateIcon, ReplaceIcon } from './icons';
 
 interface CardActionBarProps {
   canAct: boolean;
@@ -59,7 +59,11 @@ export function CardActionBar({
         disabled={!canAct}
         title="Copy the suggestion"
       >
-        {isCopied ? '✓ Copied' : 'Copy'}
+        {/* An icon beside a plain label, as the other buttons do. A U+2713
+            spliced into the string landed in the accessible name, so a screen
+            reader announced "check mark Copied". */}
+        {isCopied && <CheckIcon />}
+        <span>{isCopied ? 'Copied' : 'Copy'}</span>
       </button>
     </div>
   );

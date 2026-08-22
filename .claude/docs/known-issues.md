@@ -26,6 +26,10 @@ verified rather than assumed:
 - Also checked once by hand against **`playground.lexical.dev`**, a live Lexical
   build: the editor claimed the edit via `beforeinput` and the substitution
   verified. Not committed — it needs the network.
+- **Ctrl+Z after a replacement restores the original** in a textarea, an input, a
+  plain contenteditable and real Lexical. In the first three that is the browser's
+  own undo stack, kept intact by preferring `execCommand('insertText')`; in Lexical
+  it is the editor's history reversing an edit it accepted through `beforeinput`.
 - The card **reports honestly when it cannot substitute**: an editor that ignores
   every hook gets "Copied — check the field" rather than a claimed success, and the
   card stays open.
@@ -52,10 +56,6 @@ verified rather than assumed:
   reason sniffing for an editor is acceptable here.
 - **Gmail, Notion, Discord.** Gmail is a plain contenteditable and is covered by
   proxy; the others are not covered at all.
-- The **native undo stack** after a replacement. `execCommand('insertText')` is
-  preferred precisely to preserve it, but Ctrl+Z has never been pressed after a
-  replacement in any of these editors — and the `beforeinput` path now hands the
-  edit to the editor's own history plugin instead, which changes what undo does.
 - **Ollama, and Groq's smaller model.** `pnpm eval` (below) covers
   `llama-3.3-70b-versatile` only. Ollama needs a local server, and the 8B is one
   `GROQ_EVAL_MODEL=llama-3.1-8b-instant pnpm eval` away but has never been run — a
@@ -243,15 +243,29 @@ Coverage sits well above the enforced 80% floor.
   once, immediately, can read a stale position — which is why the viewport test
   polls rather than asserting on one sample.
 
-- **`prefers-reduced-motion`** is honoured via a media query in `tokens.css`, which
-  zeroes durations globally. The spinner still spins, just instantly — a static
-  indicator would be better.
-- **Emoji in the popup tabs** (`⚙️ Setup`, `🧪 Playground`, `ℹ️ Info`), marked
-  `aria-hidden`. The card and its adjust drawer now use real inline SVGs; the
-  popup has not been given the same treatment.
-- **Contrast** was fixed by replacing blanket `opacity: 0.5` on disabled controls
-  with explicit token colours. The palette has not been audited with an automated
-  checker.
-- **No undo affordance in the card.** After Replace, recovery depends on the
-  browser's native undo stack, which the code preserves by preferring
-  `execCommand('insertText')` — but see the unverified list above.
+- **No emoji remain in the UI.** The popup tab glyphs went with the tabs; the `⚡`
+  headers use `AppMark` and the Copy button's tick is `CheckIcon`, both inline SVGs
+  in the card's stroke style. Worth keeping that way: a glyph inside a button label
+  lands in the accessible name, which is how "✓ Copied" came to be announced as
+  "check mark Copied".
+- **Contrast is enforced, not spot-checked.** `tests/shared/contrast.test.ts` parses
+  `tokens.css` itself and computes oklch → sRGB luminance, so a palette edit that
+  drops below 4.5:1 for text or 3:1 for a control boundary fails the gate. Blanket
+  `opacity: 0.5` on disabled controls was replaced with explicit token colours.
+- **There is no Undo button in the card, and it does not need one.** Ctrl+Z is now
+  asserted in `tests/e2e/` after every replacement — textarea, input, plain
+  contenteditable, and real Lexical — and restores the original in all four. In
+  Lexical it is the editor's own history that reverses it, because the edit was
+  offered as a `beforeinput` the editor claimed; the fixture registers
+  `@lexical/history` for that reason, and the assertion failed before it did.
+
+  **The fallback path costs the undo stack.** Proven by forcing
+  `trySelectRangeAndInsert` to decline: the native-setter path then writes a value
+  the browser has no history entry for, and Ctrl+Z leaves the rewrite in place.
+  That is the price of the fallback existing, not a bug — but it means preferring
+  `execCommand('insertText')` buys undo, not just tidiness, and anything that
+  weakens that preference should expect this test to fail.
+
+  A button was considered and not built. It would have to reverse the deliberate
+  400ms auto-dismiss in `RewriteCard.tsx`, and `execCommand('undo')` is separately
+  rejected under Accepted tradeoffs.

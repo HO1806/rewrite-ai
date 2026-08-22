@@ -36,6 +36,7 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "2.7.1",
     "@eslint/js": "^9.15.0",
+    "@lexical/history": "^0.49.0",
     "@lexical/plain-text": "^0.49.0",
     "@playwright/test": "^1.62.1",
     "@testing-library/dom": "^10.4.0",

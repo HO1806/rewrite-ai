@@ -281,7 +281,18 @@ describe('RewriteCard', () => {
     await userEvent.click(copy);
 
     expect(writeText).toHaveBeenCalledWith('Copy me.');
-    await waitFor(() => expect(screen.getByText(/Copied/)).toBeInTheDocument());
+
+    /**
+     * The accessible name, exactly — not a substring. The confirmation used to
+     * be the string '✓ Copied', so a screen reader announced the glyph as part
+     * of the button's name. The tick is an SVG beside the label now, as it is
+     * on every other button in the card.
+     */
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Copied' }),
+      ).toBeInTheDocument(),
+    );
   });
 
   it('closes on the close button', async () => {

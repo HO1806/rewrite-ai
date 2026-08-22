@@ -65,3 +65,12 @@ export function GearIcon({ size = 13 }: IconProps) {
     </svg>
   );
 }
+
+/** Confirmation on the Copy button, replacing a U+2713 spliced into its label. */
+export function CheckIcon({ size = 14 }: IconProps) {
+  return (
+    <svg {...base(size)} strokeWidth={2.5}>
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}

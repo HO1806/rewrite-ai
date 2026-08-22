@@ -123,11 +123,16 @@ export const LEXICAL_ORIGINAL = 'their going to the meating tomorow';
 const LEXICAL_ENTRY = `
 import { createEditor, $getRoot, $createParagraphNode, $createTextNode } from 'lexical';
 import { registerPlainText } from '@lexical/plain-text';
+import { createEmptyHistoryState, registerHistory } from '@lexical/history';
 
 const element = document.getElementById('editor');
 const editor = createEditor({ namespace: 'fixture', onError: (error) => { throw error; } });
 editor.setRootElement(element);
 registerPlainText(editor);
+// Undo is Lexical's own, not the browser's: an edit the editor claimed via
+// beforeinput goes onto this stack, and Ctrl+Z is meaningless without it.
+// WhatsApp Web -- the composer this fixture stands in for -- has it.
+registerHistory(editor, createEmptyHistoryState(), 300);
 
 editor.update(() => {
   const paragraph = $createParagraphNode();
