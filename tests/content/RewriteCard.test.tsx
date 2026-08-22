@@ -376,6 +376,73 @@ describe('RewriteCard', () => {
       ).toBeInTheDocument();
     });
 
+    /**
+     * The regression that made this audit worth running. Roving `tabIndex` puts
+     * -1 on the inactive tab, so without an arrow-key handler it is unreachable
+     * by keyboard entirely — on an extension whose only entry point is a
+     * keyboard shortcut. The comment claimed arrow keys worked; the handler had
+     * been lost when the shared Tabs component was deleted.
+     */
+    it('moves between tabs with the arrow keys', async () => {
+      await seedSettings();
+      const calls = stubFetchEach(() => sseResponse(frames('ok')));
+      await renderCard();
+
+      const rewrite = await screen.findByRole('tab', { name: /Rewrite/ });
+      rewrite.focus();
+      await waitFor(() => expect(calls).toHaveLength(1));
+
+      await userEvent.keyboard('{ArrowRight}');
+
+      expect(screen.getByRole('tab', { name: /Translate/ })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      // Focus follows selection, or the next arrow press acts on the wrong tab.
+      expect(screen.getByRole('tab', { name: /Translate/ })).toHaveFocus();
+      await waitFor(() => expect(calls).toHaveLength(2));
+    });
+
+    it('wraps around, and Home and End jump to the ends', async () => {
+      await seedSettings();
+      stubFetchEach(() => sseResponse(frames('ok')));
+      await renderCard();
+
+      (await screen.findByRole('tab', { name: /Rewrite/ })).focus();
+
+      await userEvent.keyboard('{ArrowLeft}');
+      expect(screen.getByRole('tab', { name: /Translate/ })).toHaveFocus();
+
+      await userEvent.keyboard('{Home}');
+      expect(screen.getByRole('tab', { name: /Rewrite/ })).toHaveFocus();
+
+      await userEvent.keyboard('{End}');
+      expect(screen.getByRole('tab', { name: /Translate/ })).toHaveFocus();
+    });
+
+    /**
+     * Interactive content inside a <button> is invalid HTML, and the nested
+     * control leaked its own label into the tab's accessible name.
+     */
+    it('keeps the gear out of the tab button', async () => {
+      await seedSettings();
+      stubFetchEach(() => sseResponse(frames('ok')));
+      await renderCard();
+
+      await userEvent.click(
+        await screen.findByRole('tab', { name: /Translate/ }),
+      );
+
+      const gear = await screen.findByRole('button', {
+        name: /Language: English/,
+      });
+      expect(gear.closest('[role="tab"]')).toBeNull();
+      // The tab's name must be the mode, not the mode plus the gear's label.
+      expect(
+        screen.getByRole('tab', { name: 'Translate' }),
+      ).toBeInTheDocument();
+    });
+
     it('picks a language, persists it and translates again', async () => {
       await seedSettings();
       const calls = stubFetchEach(() => sseResponse(frames('ok')));
@@ -393,6 +460,38 @@ describe('RewriteCard', () => {
 
       expect(onLanguageChange).toHaveBeenCalledWith('German');
       await waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(3));
+    });
+
+    /**
+     * The worker reads the stored language when it builds the prompt, so a
+     * re-run that starts before the write lands translates into the *previous*
+     * language — and Regenerate then appears to "fix" it.
+     */
+    it('waits for the language to persist before translating again', async () => {
+      await seedSettings();
+      const calls = stubFetchEach(() => sseResponse(frames('ok')));
+      const order: string[] = [];
+      const onLanguageChange = vi.fn(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        order.push('saved');
+      });
+      await renderCard(onLanguageChange);
+
+      await userEvent.click(
+        await screen.findByRole('tab', { name: /Translate/ }),
+      );
+      const before = calls.length;
+      await userEvent.click(
+        await screen.findByRole('button', { name: /Language: English/i }),
+      );
+      await userEvent.selectOptions(
+        await screen.findByLabelText(/Translate into/i),
+        'German',
+      );
+
+      await waitFor(() => expect(calls.length).toBeGreaterThan(before));
+      order.push('requested');
+      expect(order).toEqual(['saved', 'requested']);
     });
   });
 

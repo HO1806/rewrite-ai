@@ -173,6 +173,34 @@ What it does not cover:
   programmatic signal for it, so this is a judgement that has to be re-made whenever
   the list is refreshed.
 
+## Open findings from the August 2026 audit
+
+Nine specialist agents audited every surface; the full record with dispositions is in
+[audit-2026-08.md](audit-2026-08.md). Everything below was found, verified, and deliberately
+**not** fixed, because each changes behaviour or costs more than that pass allowed. They are
+listed here so they stay visible rather than living only in an audit file.
+
+- **Truncation is never surfaced (HIGH).** No stream parser checks whether the model stopped
+  because it hit the token limit, and Gemini's error extractor explicitly whitelists
+  `MAX_TOKENS`. A rewrite cut off mid-sentence is presented as complete. Fixing it needs a
+  decision: fail and lose the partial text, or show it with a notice, which needs UI that does
+  not exist.
+- **`loadSettings` heals wholesale (HIGH).** One corrupt field discards the whole object,
+  including the API key, with only a console warning. Mitigated in practice — stored values
+  merge over defaults first, so a missing field is harmless and only real corruption triggers
+  it — but the fix is per-field healing plus telling the user their key was dropped.
+- **A missing provider field reads as an empty one (MEDIUM),** so an API shape change or a
+  model refusal becomes a successful empty rewrite.
+- **PING resolves on the first frame to answer (MEDIUM),** not the frame holding the selection.
+  Pre-existing, and it mattered less when the context menu offered a frame-scoped path.
+- **`SelectionInfo` is an undiscriminated union (MEDIUM).** No live bug; the cheap slice is
+  deleting the unused `element` field on the rich-text path.
+- **The API key travels to any https base URL (MEDIUM),** for every provider rather than only
+  `custom`. Wants an advisory warning in the options UI, not a schema change.
+- **No sender check on the message bridges (LOW).** Not currently exploitable.
+- **`--border-strong` is 2.00:1 in the light theme (LOW),** under the 3:1 for non-text.
+  Mitigated by the legible labels on the buttons it outlines.
+
 ## Accepted tradeoffs
 
 Not bugs. Documented so nobody "fixes" them without knowing the reason.

@@ -82,7 +82,10 @@ export interface AIProvider {
 }
 
 export type AIProviderErrorCode =
+  /** A key was sent and the provider rejected it. */
   | 'INVALID_API_KEY'
+  /** No key is configured at all — a different problem with a different fix. */
+  | 'MISSING_API_KEY'
   | 'RATE_LIMIT'
   | 'NETWORK_ERROR'
   | 'PROVIDER_ERROR'

@@ -25,6 +25,7 @@ import {
   REQUEST_TIMEOUT_MS,
   REQUEST_TIMEOUT_NO_STREAM_MS,
   STREAM_PORT_NAME,
+  getProvider,
 } from '@/shared/constants';
 import type { StreamMessage } from '@/shared/types';
 import { getErrorMessage } from '@/shared/errors';
@@ -101,6 +102,21 @@ class StreamSession {
     signal: AbortSignal,
     settings: Settings,
   ): Promise<void> {
+    /**
+     * Checked before anything is built or sent.
+     *
+     * Without a key the old path still opened the card, showed a spinner, made a
+     * request that was never going to be answered, and only then reported the
+     * provider's own wording. On first run that is the entire experience of the
+     * extension, and it says nothing about what to do next.
+     */
+    if (getProvider(settings.provider).needsApiKey && !settings.apiKey.trim()) {
+      throw new AIProviderError(
+        `No ${getProvider(settings.provider).label} API key yet. Open the extension options and add one.`,
+        'MISSING_API_KEY',
+      );
+    }
+
     const provider = createProvider(buildProviderConfig(settings));
 
     /**
@@ -208,6 +224,10 @@ export function toUserMessage(err: unknown): string | null {
       return null;
     case 'INVALID_API_KEY':
       return 'Invalid API key. Check your key in the extension options.';
+    // Carries its own wording: it names the provider and says what to do, which
+    // on first run is the only thing the user needs to hear.
+    case 'MISSING_API_KEY':
+      return err.message;
     case 'RATE_LIMIT':
       return 'Rate limit reached. Wait a moment and try again.';
     case 'TIMEOUT':

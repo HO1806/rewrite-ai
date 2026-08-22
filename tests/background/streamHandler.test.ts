@@ -271,6 +271,26 @@ describe('registerStreamHandler', () => {
   });
 
   /**
+   * First run, before a key is entered. The old path opened the card, span, made
+   * a request that could not succeed, and reported the provider's own wording —
+   * which says nothing about what to do next.
+   */
+  it('says a key is missing without calling the provider', async () => {
+    await seedSettings({ apiKey: '' });
+    const calls = stubFetch([sseResponse(frames('ok'))]);
+
+    const { client } = connect();
+    client.postMessage(REQUEST);
+    await settle();
+
+    expect(calls).toHaveLength(0);
+    const error = received(client).find((message) => message.type === 'ERROR');
+    expect(error).toMatchObject({
+      message: expect.stringContaining('extension options'),
+    });
+  });
+
+  /**
    * The framing that stops the model replying to the user's draft instead of
    * rewriting it. The selection has to arrive delimited, with the task stated
    * after it — see src/prompts/assemble.ts.

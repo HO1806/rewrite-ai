@@ -32,8 +32,16 @@ export function registerModelsBridge(): void {
     const parsed = listModelsRequestSchema.safeParse(raw);
     if (!parsed.success) return undefined;
 
-    createProvider(configFrom(parsed.data.settings))
-      .listModels()
+    /**
+     * Started inside the promise chain on purpose. `configFrom` parses, and
+     * `buildProviderConfig` throws for a custom provider with no base URL — both
+     * synchronously. Called before the chain, either throw escaped the listener
+     * entirely: `return true` never ran, `sendResponse` never fired, and the
+     * options page saw a closed channel instead of the message the factory had
+     * gone to the trouble of writing.
+     */
+    Promise.resolve()
+      .then(() => createProvider(configFrom(parsed.data.settings)).listModels())
       .then((models) => sendResponse({ ok: true, models }))
       .catch((err: unknown) =>
         // Reported, never swallowed: a silent empty list would look identical to

@@ -5,7 +5,8 @@
  * assume state survives between events: MV3 terminates the worker when idle.
  */
 
-import { loadSettings } from '@/storage/settings';
+import { DEFAULT_SETTINGS } from '@/shared/constants';
+import { loadSettings, settingsSchema } from '@/storage/settings';
 import type { BackgroundToContentMessage } from '@/shared/types';
 import { registerStreamHandler } from './streamHandler';
 import { registerModelsBridge } from './modelsBridge';
@@ -29,16 +30,30 @@ chrome.commands.onCommand.addListener((command, tab) => {
   if (command !== 'improve-writing' || !tab?.id) return;
 
   const tabId = tab.id;
-  void loadSettings().then((settings) =>
-    // A command carries no frame id. Broadcasting is safe because
-    // TRIGGER_REWRITE has no text, so a frame with no live selection does
-    // nothing at all.
-    deliver(tabId, {
-      type: 'TRIGGER_REWRITE',
-      action: settings.lastAction,
-      language: settings.translateLanguage,
-    }),
-  );
+  void loadSettings()
+    .catch((err: unknown) => {
+      /**
+       * The shortcut is the only way into this extension, so a rejected settings
+       * read must not end the story — an unhandled rejection here meant the user
+       * pressed the key and nothing happened at all, with nothing logged. Fall
+       * back to the defaults so the card still opens.
+       */
+      console.warn(
+        '[Rewrite AI] Could not read settings; using defaults:',
+        err,
+      );
+      return settingsSchema.parse({ ...DEFAULT_SETTINGS });
+    })
+    .then((settings) =>
+      // A command carries no frame id. Broadcasting is safe because
+      // TRIGGER_REWRITE has no text, so a frame with no live selection does
+      // nothing at all.
+      deliver(tabId, {
+        type: 'TRIGGER_REWRITE',
+        action: settings.lastAction,
+        language: settings.translateLanguage,
+      }),
+    );
 });
 
 async function deliver(

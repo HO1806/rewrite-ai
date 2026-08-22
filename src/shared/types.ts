@@ -77,6 +77,23 @@ export type BackgroundToContentMessage =
   | { type: 'PING' };
 
 /**
+ * One-shot messages between the extension's own surfaces.
+ *
+ * Declared here so `messages.ts` can `satisfies z.ZodType<...>` against them,
+ * the same drift guard the port messages already had. Without a type to check
+ * against, a typo in one of these string literals compiled cleanly at the send
+ * site and failed silently at the receiver, which validates and drops.
+ */
+export interface GetThemeRequest {
+  type: 'GET_THEME';
+}
+
+export interface SetLanguageRequest {
+  type: 'SET_LANGUAGE';
+  language: string;
+}
+
+/**
  * Messages sent through the streaming port (background → content).
  */
 export type StreamMessage =

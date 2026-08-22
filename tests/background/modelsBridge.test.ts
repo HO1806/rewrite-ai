@@ -79,6 +79,29 @@ describe('registerModelsBridge', () => {
     expect(calls).toHaveLength(0);
   });
 
+  /**
+   * The provider is built inside the promise chain, not before it. Built before,
+   * a synchronous throw escaped the listener: `return true` never ran, the reply
+   * never came, and the caller saw a closed channel instead of the message the
+   * factory wrote.
+   */
+  it('answers with the reason when the config itself is invalid', async () => {
+    const calls = stubFetch([jsonResponse({ data: [] })]);
+
+    const reply = await ask({
+      ...DRAFT,
+      provider: 'custom',
+      baseUrl: '',
+      model: 'anything',
+    });
+
+    expect(reply).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('base URL'),
+    });
+    expect(calls).toHaveLength(0);
+  });
+
   it('ignores messages that are not its own', async () => {
     await expect(ask(undefined)).resolves.toBeUndefined();
   });

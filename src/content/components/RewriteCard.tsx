@@ -37,8 +37,13 @@ interface RewriteCardProps {
   /** The stored translation language, resolved before the card mounts. */
   initialLanguage: string;
   onClose: () => void;
-  /** Persists a language chosen from the gear. */
-  onLanguageChange: (language: string) => void;
+  /**
+   * Persists a language chosen from the gear.
+   *
+   * Returns a promise the card awaits: the worker reads the stored language when
+   * building the prompt, so the re-run must not start before the write lands.
+   */
+  onLanguageChange: (language: string) => Promise<void>;
 }
 
 export function RewriteCard({
@@ -58,6 +63,8 @@ export function RewriteCard({
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Held in a ref, not state: the guard has to be read synchronously. */
   const isReplacing = useRef(false);
+  /** Focus goes back here when the language picker closes. */
+  const gearRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
 
   const { text, isGenerating, error, start } = useStreamingRewrite();
@@ -121,13 +128,27 @@ export function RewriteCard({
     start({ action: next, text: selectionInfo.text });
   };
 
-  const handleLanguageChange = (next: string) => {
+  const handleLanguageChange = async (next: string) => {
     setLanguage(next);
     setIsLanguageOpen(false);
-    onLanguageChange(next);
     setOutcome(null);
-    // The stored language is what the worker reads when building the prompt, so
-    // the re-run has to wait for the write rather than race it.
+
+    /**
+     * Awaited, and that is the whole point.
+     *
+     * The worker reads `translateLanguage` from storage when it builds the
+     * prompt, so starting the re-run before the write lands translates into the
+     * *previous* language — and pressing Regenerate then appears to "fix" it,
+     * which is the shape of a bug nobody reports accurately. The comment here
+     * used to claim this waited while the call was fire-and-forget.
+     */
+    await onLanguageChange(next);
+
+    // The picker has unmounted, taking focus with it; without this, focus falls
+    // to the page body outside the shadow root and the card's focus trap has
+    // nothing left to trap.
+    gearRef.current?.focus();
+
     start({ action: 'translate', text: selectionInfo.text });
   };
 
@@ -160,14 +181,17 @@ export function RewriteCard({
       <CardTabs
         action={action}
         language={language}
-        isBusy={isGenerating}
         onSelect={handleSelectTab}
         onOpenLanguages={() => setIsLanguageOpen((open) => !open)}
         isLanguageOpen={isLanguageOpen}
+        gearRef={gearRef}
       />
 
       {isLanguageOpen && (
-        <LanguagePicker language={language} onChange={handleLanguageChange} />
+        <LanguagePicker
+          language={language}
+          onChange={(next) => void handleLanguageChange(next)}
+        />
       )}
 
       <StreamOutput text={text} isGenerating={isGenerating} error={error} />

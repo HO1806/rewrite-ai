@@ -95,6 +95,15 @@ function replaceInFormField(
    * selection to the end — re-reading here appended the rewrite to the user's
    * original text while still reporting a successful replacement.
    */
+  /**
+   * A detached field still answers `.value` and `.setSelectionRange`, so every
+   * check below passes and the native setter writes into an orphan node that is
+   * no longer in the document — reported as `'replaced'`, with the rewrite lost
+   * and not even on the clipboard. A framework that re-creates the node on blur
+   * is all it takes.
+   */
+  if (!field.isConnected) return false;
+
   const start = selectionInfo.selectionStart ?? field.selectionStart ?? 0;
   const end = selectionInfo.selectionEnd ?? field.selectionEnd ?? 0;
 
@@ -201,9 +210,19 @@ async function replaceInContentEditable(
   const selection = window.getSelection();
   if (!selection) return 'failed';
 
+  if (!(await restoreSelection(selection, range, host))) return 'failed';
+
   /**
-   * A re-render can leave the range's nodes attached but their text changed, and
-   * writing over that would destroy something the user never selected.
+   * Validated *after* the restore, not before it.
+   *
+   * `restoreSelection` awaits two or three tasks so the editor can observe the
+   * selection, and the page is free to re-render during them. Checking first
+   * meant the guard described below was answering a question about a DOM that no
+   * longer existed by the time the edit landed: a re-render leaving the boundary
+   * nodes attached but their text changed would pass, and the edit would destroy
+   * something the user never selected. The `before` snapshot has the same
+   * problem — taken early, it made `verifySubstitution`'s length arithmetic
+   * compare against a baseline that was already gone.
    */
   if (
     !isRangeConnected(range) ||
@@ -213,8 +232,6 @@ async function replaceInContentEditable(
   }
 
   const before = host.textContent ?? '';
-
-  if (!(await restoreSelection(selection, range, host))) return 'failed';
 
   /**
    * Strategies in order of fidelity, stopping at the first that takes.

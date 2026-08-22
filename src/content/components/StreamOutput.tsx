@@ -7,13 +7,16 @@ interface StreamOutputProps {
 /**
  * The streaming result.
  *
- * `aria-live="polite"` plus `aria-busy` is what makes the generation audible to
- * a screen reader — previously text streamed in with no announcement at all, and
- * errors were rendered as ordinary text rather than an alert.
+ * **The result area is deliberately not a live region.** It was `aria-live`,
+ * which re-announces the whole region on every mutation — and a chunk arrives
+ * per token, so a screen reader restarted the entire suggestion from the top
+ * dozens of times per rewrite. The announcement is now a single status message
+ * when generation finishes, which is the one moment there is something to say.
+ * Errors keep `role="alert"`, which is correctly assertive.
  */
 export function StreamOutput({ text, isGenerating, error }: StreamOutputProps) {
   return (
-    <div className="card__output" aria-live="polite" aria-busy={isGenerating}>
+    <div className="card__output" aria-busy={isGenerating}>
       {isGenerating && !text && (
         <div className="card__status">
           <div className="card__spinner" aria-hidden="true" />
@@ -28,6 +31,10 @@ export function StreamOutput({ text, isGenerating, error }: StreamOutputProps) {
       ) : (
         <span>{text}</span>
       )}
+
+      <span className="sr-only" role="status">
+        {!isGenerating && text && !error ? 'Suggestion ready' : ''}
+      </span>
     </div>
   );
 }

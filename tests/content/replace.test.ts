@@ -183,6 +183,32 @@ describe('replaceSelectedText in an input', () => {
  * the end. Re-reading the offsets at replace time therefore appended the rewrite
  * to the user's original text — while still reporting a successful replacement.
  */
+/**
+ * A detached field still answers `.value` and `.setSelectionRange`, so every
+ * guard passed and the native setter wrote into a node no longer in the
+ * document — reported as a success, with the rewrite lost entirely.
+ */
+describe('replaceSelectedText into a field that left the document', () => {
+  it('copies instead of claiming it replaced', async () => {
+    stubExecCommand('unsupported');
+    const textarea = document.createElement('textarea');
+    textarea.value = 'keep old keep';
+    document.body.appendChild(textarea);
+    textarea.setSelectionRange(5, 8);
+
+    // What a framework does when it re-creates the node on blur.
+    textarea.remove();
+
+    const outcome = await replaceSelectedText(
+      selectionFor(textarea, 'textarea'),
+      'new',
+    );
+
+    expect(outcome).toBe('copied');
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('new');
+  });
+});
+
 describe('replaceSelectedText uses the offsets captured at selection time', () => {
   it('replaces the original range even after the field selection collapsed', async () => {
     stubExecCommand('unsupported');

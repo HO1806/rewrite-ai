@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — audit of every surface
+
+Nine specialist agents audited the extension after the trim. Full record with dispositions in
+`.claude/docs/audit-2026-08.md`; the open items are in `known-issues.md`.
+
+- **The second card tab was unreachable by keyboard.** Roving `tabIndex` puts `-1` on the
+  inactive tab, and the arrow-key handler was lost when the shared Tabs component was deleted —
+  the comment claiming arrow keys worked survived, the behaviour did not. On an extension whose
+  only entry point is a keyboard shortcut, that made Translate mouse-only.
+- **The language gear was invalid markup** — an interactive element nested inside a tab button,
+  leaking its label into the tab's accessible name — and choosing a language dropped focus out
+  of the shadow root entirely, disabling the card's focus trap for the rest of its life.
+- **Choosing a language translated into the previous one.** The write was fire-and-forget while
+  its comment claimed otherwise, and the worker reads the language back from storage.
+- **A replacement into a detached field reported success** and lost the rewrite entirely — a
+  detached input still answers `.value`, so every guard passed.
+- **Error text was unreadable in the light theme** at 2.75:1: `--danger` was never defined for
+  light and inherited the dark ramp. Contrast is now asserted by a test that parses the tokens.
+- **A screen reader restarted the whole suggestion on every streamed token.** The result area is
+  no longer a live region; completion is announced once.
+- Also: the models bridge could reply zero times; the only entry point had no error handling on
+  its settings read; streaming ports were never disconnected; two icon controls were under the
+  24px minimum target size; the IPv6 loopback was accepted by validation but not permitted by the
+  manifest; and the manifest description still told users to right-click.
+
+### Added — first-run guidance
+
+- **A missing API key now says so before any request is made**, naming the provider and pointing
+  at the options page. Previously the card opened, span, and reported the provider's own wording
+  after a round trip that could never succeed — which on first run was the entire experience.
+
 ### Changed — trimmed to one shortcut and two tabs
 
 The extension was shaped around a user who drives it entirely from a mouse macro bound to

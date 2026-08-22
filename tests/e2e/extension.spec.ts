@@ -425,6 +425,132 @@ test.describe('the mode tabs', () => {
   });
 });
 
+/**
+ * Keyboard and focus, in a real browser.
+ *
+ * The extension's only entry point is a keyboard shortcut, so these are not
+ * accessibility niceties — they are whether the product works for someone not
+ * using a mouse. Asserted here rather than in jsdom because focus, like layout,
+ * is something jsdom only pretends to have.
+ */
+test.describe('keyboard operation', () => {
+  test.beforeEach(async ({ seedSettings }) => {
+    await seedSettings();
+  });
+
+  test('reaches and switches both tabs with the arrow keys', async ({
+    context,
+    worker,
+    pageUrl,
+  }) => {
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+    await selectAllIn(page, 'ta');
+    await triggerRewrite(worker);
+    await expect(card(page)).toContainText(EXPECTED_REWRITE);
+
+    // Roving tabIndex means the inactive tab is not a tab stop; without an
+    // arrow handler it was unreachable by keyboard entirely.
+    await page.getByRole('tab', { name: 'Rewrite' }).focus();
+    await page.keyboard.press('ArrowRight');
+
+    await expect(page.getByRole('tab', { name: 'Translate' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    const focusedTab = await page.evaluate(() => {
+      const host = document.getElementById('rewrite-ai-root');
+      return host?.shadowRoot?.activeElement?.textContent ?? null;
+    });
+    expect(focusedTab).toBe('Translate');
+  });
+
+  /**
+   * The picker unmounts while holding focus. Without an explicit hand-back,
+   * focus falls to the page body — outside the shadow root, where the card's
+   * focus trap can no longer see it.
+   */
+  test('returns focus to the gear after choosing a language', async ({
+    context,
+    worker,
+    pageUrl,
+  }) => {
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+    await selectAllIn(page, 'ta');
+    await triggerRewrite(worker);
+    await expect(card(page)).toContainText(EXPECTED_REWRITE);
+
+    await page.getByRole('tab', { name: 'Translate' }).click();
+    await page.getByRole('button', { name: /Language: English/ }).click();
+    await page.getByLabel(/Translate into/).selectOption('German');
+
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const host = document.getElementById('rewrite-ai-root');
+          const active = host?.shadowRoot?.activeElement;
+          return (
+            active?.getAttribute('aria-label') ??
+            document.activeElement?.tagName ??
+            null
+          );
+        }),
+      )
+      .toMatch(/Language:/);
+  });
+
+  /** Invalid HTML, and it leaked the gear's label into the tab's own name. */
+  test('does not nest the gear inside a tab button', async ({
+    context,
+    worker,
+    pageUrl,
+  }) => {
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+    await selectAllIn(page, 'ta');
+    await triggerRewrite(worker);
+    await expect(card(page)).toContainText(EXPECTED_REWRITE);
+    await page.getByRole('tab', { name: 'Translate' }).click();
+
+    const nested = await page.evaluate(() => {
+      const host = document.getElementById('rewrite-ai-root');
+      const gear = host?.shadowRoot?.querySelector('.card__tab-gear');
+      return gear?.closest('[role="tab"]') !== null && gear !== undefined
+        ? Boolean(gear?.closest('[role="tab"]'))
+        : false;
+    });
+    expect(nested).toBe(false);
+  });
+
+  /** WCAG 2.2 SC 2.5.8: 24x24 CSS px minimum for a pointer target. */
+  test('gives every icon-only control a 24px target', async ({
+    context,
+    worker,
+    pageUrl,
+  }) => {
+    const page = await context.newPage();
+    await page.goto(pageUrl);
+    await selectAllIn(page, 'ta');
+    await triggerRewrite(worker);
+    await expect(card(page)).toContainText(EXPECTED_REWRITE);
+    await page.getByRole('tab', { name: 'Translate' }).click();
+
+    const sizes = await page.evaluate(() => {
+      const root = document.getElementById('rewrite-ai-root')!.shadowRoot!;
+      return ['.card__tab-gear', '.card__button--ghost'].map((selector) => {
+        const box = root.querySelector(selector)!.getBoundingClientRect();
+        return { selector, width: box.width, height: box.height };
+      });
+    });
+
+    for (const { selector, width, height } of sizes) {
+      expect(width, selector).toBeGreaterThanOrEqual(24);
+      expect(height, selector).toBeGreaterThanOrEqual(24);
+    }
+  });
+});
+
 test.describe('replacement', () => {
   test.beforeEach(async ({ seedSettings }) => {
     await seedSettings();

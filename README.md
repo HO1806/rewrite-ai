@@ -1,6 +1,6 @@
 # ⚡ Rewrite AI
 
-> Open-source browser extension that brings AI text editing to every webpage. Select text, right-click, improve, replace inline.
+> Open-source browser extension that brings AI text editing to every webpage. Select text, press Ctrl+Shift+D, replace inline.
 
 ---
 
@@ -17,28 +17,25 @@
 
 ## Using it
 
-Modelled on Microsoft Edge's **Rewrite with Copilot**, which offers itself the moment you select text rather than waiting to be found in a menu.
+1. **Select text** in any field you can type into — Gmail, WhatsApp Web, GitHub, Reddit and so on.
+2. Press **`Ctrl+Shift+D`**. That is the only way in: there is no inline button and no right-click menu, by design. Rebind it at `chrome://extensions/shortcuts` if it clashes.
+3. The **floating card** appears and streams the suggestion in. It opens on whichever tab you used last.
+4. **Replace** (or `Ctrl+Enter`) swaps the text in place. **Copy** puts it on the clipboard. **Regenerate** tries again. **Escape** dismisses.
 
-1. **Select text** in any field you can type into — Gmail, Slack, GitHub, Notion, Reddit, Discord and so on.
-2. A small **Rewrite** button appears beside the selection. Click it, or press **`Ctrl+Shift+D`**. You can also right-click and pick **Rewrite AI** → one of: Improve Writing, Fix Grammar, Make Professional, Make Friendly, Make Concise, Expand, Translate.
-3. The **floating card** appears and streams the suggestion in.
-4. **Replace** (or `Ctrl+Enter`) swaps the text in place. **Copy** puts it on the clipboard. **Adjust** re-runs the request with a different tone, format, or length. **Regenerate** tries again.
+The feature is offered **only in editable fields**: if the result could not be written back, you are not offered the rewrite in the first place. Where a captured selection goes stale mid-rewrite, the button reports **Copied instead** rather than claiming a replacement it did not make — and **Copied — check the field** if the page was altered but the substitution could not be verified.
 
-The feature is offered **only in editable fields**, as Edge's is: if the result could not be written back, you are not offered the rewrite in the first place. Where a captured selection goes stale mid-rewrite, the button reports **Copied instead** rather than claiming a replacement it did not make.
+### The two tabs
 
-### Adjust
+| Tab           | What it does                                                                             |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| **Rewrite**   | Judges how much change the text needs — corrects a clean sentence, rewrites a clumsy one |
+| **Translate** | Translates the selection. The gear beside the tabs picks the language                    |
 
-The Adjust drawer re-runs the rewrite with extra instructions:
-
-| Category | Options                                                  |
-| -------- | -------------------------------------------------------- |
-| Tone     | Professional, Casual, Enthusiastic, Informational, Funny |
-| Format   | Paragraph, Email, Ideas (bulleted), Blog post            |
-| Length   | Short, Medium, Long                                      |
+Arrow keys move between the tabs; the shortcut reopens whichever one you used last.
 
 ### Popup
 
-Clicking the toolbar icon opens a three-tab popup: **Setup** (provider, key, model, creativity), **Playground** (try a rewrite without leaving the popup), and **Info** (current configuration and shortcut).
+Clicking the toolbar icon opens a single **Setup** panel: provider, API key, model and appearance, plus the live keyboard shortcut. **Load models** asks your provider which models the key can actually use, rated strongest-first.
 
 ---
 
@@ -46,7 +43,7 @@ Clicking the toolbar icon opens a three-tab popup: **Setup** (provider, key, mod
 
 ```
 [ Webpage text selection ]
-          │  inline button, Ctrl+Shift+D, or context menu
+          │  Ctrl+Shift+D
           ▼
 [ Background service worker ]  ── fetch ──▶  [ AI provider ]
           │  chrome.runtime port: CHUNK / DONE / ERROR
@@ -66,7 +63,7 @@ The network request is made **in the background service worker**, not in the con
 ```
 src/
   ai/           provider implementations, streaming, factory
-  background/   service worker: context menus, tab messaging, port handler
+  background/   service worker: tab messaging, command handler, port handler
   content/      content script: selection, replacement, the floating card
   popup/        toolbar popup
   options/      options page
@@ -108,7 +105,7 @@ pnpm test:e2e         # load the built extension in Chromium and drive it
 
 > **Load `dist/`, not the project root.** The root also contains a `manifest.json` — it is the build _input_ and points at `.ts`/`.tsx` sources. Chrome accepts it, because it is structurally valid, and then nothing works at all: the browser cannot execute TypeScript, so the service worker fails to register and you get a red **Errors** badge on the extension card.
 
-Tabs that were already open when you loaded the extension have no content script yet. The worker injects one on demand and waits for it to become ready before delivering, so the first right-click works — but reloading the page is still the quickest fix if anything looks stuck.
+Tabs that were already open when you loaded the extension have no content script yet. The worker injects one on demand and waits for it to become ready before delivering, so the first press of the shortcut works — but reloading the page is still the quickest fix if anything looks stuck.
 
 ---
 

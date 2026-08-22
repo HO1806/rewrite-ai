@@ -70,12 +70,19 @@ function openCardFromSelection(action: RewriteAction, language: string): void {
   void loadResolvedTheme().then((theme) => applySurfaceTheme('card', theme));
 }
 
-/** Hands the chosen language to the worker, which owns settings storage. */
-function saveLanguage(language: string): void {
-  void chrome.runtime
-    .sendMessage({ type: 'SET_LANGUAGE', language })
-    .catch(() => {
-      // The card still uses the new language for this session; only the
-      // preference is lost, and that is not worth interrupting a rewrite for.
-    });
+/**
+ * Hands the chosen language to the worker, which owns settings storage.
+ *
+ * Awaited by the card before it re-runs the translation: the worker reads the
+ * stored language when building the prompt, so a re-run that starts first gets
+ * the previous language. A failed write is not worth blocking the rewrite over —
+ * the card keeps using the chosen language for this session either way — but it
+ * is reported rather than swallowed.
+ */
+async function saveLanguage(language: string): Promise<void> {
+  try {
+    await chrome.runtime.sendMessage({ type: 'SET_LANGUAGE', language });
+  } catch (err: unknown) {
+    console.warn('[Rewrite AI] Could not save the language preference:', err);
+  }
 }

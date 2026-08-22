@@ -13,7 +13,9 @@ import { MAX_INPUT_LENGTH } from '@/shared/constants';
 import { settingsSchema } from '@/storage/settings';
 import type {
   BackgroundToContentMessage,
+  GetThemeRequest,
   RewriteAction,
+  SetLanguageRequest,
   StreamMessage,
   StreamRequest,
 } from '@/shared/types';
@@ -63,7 +65,7 @@ export const streamRequestSchema = z.object({
  */
 export const themeRequestSchema = z.object({
   type: z.literal('GET_THEME'),
-});
+}) satisfies z.ZodType<GetThemeRequest>;
 
 /**
  * content → background: persist a language chosen from the card's gear.
@@ -74,7 +76,7 @@ export const themeRequestSchema = z.object({
 export const setLanguageRequestSchema = z.object({
   type: z.literal('SET_LANGUAGE'),
   language: z.string().min(1).max(60),
-});
+}) satisfies z.ZodType<SetLanguageRequest>;
 
 export const themeResponseSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']),

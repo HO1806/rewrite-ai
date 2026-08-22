@@ -115,10 +115,20 @@
 
   --text-primary: oklch(24% 0.015 262);
   --text-secondary: oklch(44% 0.02 258);
-  --text-muted: oklch(56% 0.025 256);
 
   --accent-soft: oklch(94% 0.03 253);
   --accent-text: oklch(45% 0.16 253);
+
+  /*
+   * Both of these were failing WCAG AA against the light surfaces, measured
+   * rather than guessed: `--danger` was never redefined for light at all, so it
+   * inherited the dark ramp's value and rendered error text at 2.75:1 on a
+   * near-white card — the one message a user most needs to read. `--text-muted`
+   * missed by a hair at 4.39:1. Darkened to 4.5:1+ on `--surface-raised`, which
+   * is the tighter of the two backgrounds they appear on.
+   */
+  --danger: oklch(55% 0.19 25);
+  --text-muted: oklch(54% 0.025 256);
 
   --surface-inverse: oklch(30% 0 0);
   --text-on-inverse: oklch(100% 0 0);

@@ -130,14 +130,23 @@
 
 /* ── Tabs ── */
 
-/* Was the adjust drawer's tablist; the drawer is gone and the tabs now switch
-   between Rewrite and Translate, which is the only route to Translate at all. */
-.card__tablist {
+/* The gear sits beside the tablist, not inside a tab: interactive content nested
+   in a <button> is invalid, and it leaked its label into the tab's name. */
+.card__tabrow {
   flex: 0 0 auto;
   display: flex;
+  align-items: stretch;
+  justify-content: space-between;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
   border-bottom: 1px solid var(--border-default);
+}
+
+/* Was the adjust drawer's tablist; the drawer is gone and the tabs now switch
+   between Rewrite and Translate, which is the only route to Translate at all. */
+.card__tablist {
+  display: flex;
+  gap: var(--space-2);
 }
 
 .card__tab {
@@ -167,16 +176,22 @@
 }
 
 /* A button inside a button is invalid, so the gear is a role="button" span. */
+/* 24x24 minimum hit target (WCAG 2.2 SC 2.5.8): 13px icon + 6px padding = 25px. */
 .card__tab-gear {
+  align-self: center;
   display: inline-flex;
   align-items: center;
-  padding: 2px;
-  color: inherit;
+  justify-content: center;
+  padding: 6px;
+  color: var(--text-muted);
   cursor: pointer;
+  background-color: transparent;
+  border: none;
   border-radius: var(--radius-sm);
 }
 
 .card__tab-gear:hover {
+  color: var(--text-primary);
   background-color: var(--surface-hover);
 }
 
@@ -277,8 +292,9 @@
   padding: var(--space-2) var(--space-3);
 }
 
+/* Also 24x24: 16px glyph + 5px padding. */
 .card__button--ghost {
-  padding: var(--space-1);
+  padding: 5px;
   color: var(--text-primary);
   background-color: transparent;
   border: none;

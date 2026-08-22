@@ -14,13 +14,13 @@ The provider `fetch` happens **only** in the service worker. The content script 
 
 ## Request flow
 
-1. **Trigger.** `chrome.contextMenus.onClicked` or `chrome.commands.onCommand` in [index.ts](../../src/background/index.ts). `menuItemId` is `string | number`, so it is matched against `ACTIONS` rather than cast.
+1. **Trigger.** `chrome.commands.onCommand` — `Ctrl+Shift+D`, the only entry point — in [index.ts](../../src/background/index.ts). It reads `lastAction` and `translateLanguage` from settings so the card reopens on the tab last used. `menuItemId` is `string | number`, so it is matched against `ACTIONS` rather than cast.
 
 2. **Delivery.** [tabs.ts](../../src/background/tabs.ts) `sendMessageToTab` tries `chrome.tabs.sendMessage`. On failure — a tab that predates the extension load — it injects the content script using paths read from `chrome.runtime.getManifest().content_scripts`, then **resends**. Failures are classified as `restricted-page`, `no-content-script`, or `unknown` rather than swallowed.
 
 3. **Open the card.** [content/index.tsx](../../src/content/index.tsx) validates the message against `backgroundToContentMessageSchema`. It returns `undefined` for anything it does not handle, so it does not claim the response channel, and `false` for messages it answers synchronously.
 
-   `buildSelectionInfo` prefers the live selection (`getSelectionInfo`) and falls back to the context menu's `selectionText`, centring the card when the selection is unmeasurable in this frame.
+   `getEditableSelectionInfo` reads the live selection. There is no fallback text: without a measurable selection there is nothing to write a result back into, so no card opens.
 
 4. **Mount.** [mount.ts](../../src/content/mount.ts) creates a shadow host and a React root **as a pair** and always replaces both together. Caching the root independently of its mount node is what previously left the card permanently invisible once a host page removed the host element.
 
@@ -46,7 +46,7 @@ The provider `fetch` happens **only** in the service worker. The content script 
 ## Port protocol
 
 ```
-content → background   { type: 'START_REWRITE', action, text, adjustParams? }
+content → background   { type: 'START_REWRITE', action, text }
 background → content   { type: 'CHUNK', text }        zero or more
                        { type: 'DONE', fullText }     terminal, success
                        { type: 'ERROR', message }     terminal, failure

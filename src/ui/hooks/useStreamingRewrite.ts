@@ -73,6 +73,10 @@ export function useStreamingRewrite(): StreamState & {
                 isGenerating: false,
                 error: null,
               }));
+              // Disconnect, do not merely forget: a dropped-but-connected port
+              // leaves a live StreamSession in the worker and keeps MV3 from
+              // ever idling it out on a long-lived tab.
+              port.disconnect();
               portRef.current = null;
               break;
             case 'ERROR':
@@ -81,6 +85,10 @@ export function useStreamingRewrite(): StreamState & {
                 isGenerating: false,
                 error: message.message,
               }));
+              // Disconnect, do not merely forget: a dropped-but-connected port
+              // leaves a live StreamSession in the worker and keeps MV3 from
+              // ever idling it out on a long-lived tab.
+              port.disconnect();
               portRef.current = null;
               break;
           }
@@ -108,6 +116,10 @@ export function useStreamingRewrite(): StreamState & {
         const request: StreamRequest = { type: 'START_REWRITE', action, text };
         port.postMessage(request);
       } catch (err: unknown) {
+        // The port connected but the request never went out; close it rather
+        // than leaving a session open in the worker for a stream that will
+        // never arrive.
+        portRef.current?.disconnect();
         portRef.current = null;
         update((previous) => ({
           ...previous,
