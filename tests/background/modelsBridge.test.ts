@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { chromeMock } from '../setup';
 import { registerModelsBridge } from '@/background/modelsBridge';
 import { jsonResponse, stubFetch } from '../helpers/http';
 
@@ -104,5 +105,25 @@ describe('registerModelsBridge', () => {
 
   it('ignores messages that are not its own', async () => {
     await expect(ask(undefined)).resolves.toBeUndefined();
+  });
+
+  /**
+   * Defence in depth, not a live hole: nothing today gives a page a route into
+   * the isolated world, so a content script never sends this. If one ever could,
+   * the bridge hands out a worker-privileged fetch — it reaches loopback and
+   * cross-origin hosts a page cannot — driven by settings the caller supplies.
+   * An extension surface has an id and no tab; a content script has a tab.
+   */
+  it('does not answer a content script', async () => {
+    const calls = stubFetch([
+      jsonResponse({ data: [{ id: 'openai/gpt-oss-120b' }] }),
+    ]);
+    chromeMock.messageSender = {
+      id: 'mock-id',
+      tab: { id: 7 } as chrome.tabs.Tab,
+    };
+
+    await expect(ask(DRAFT)).resolves.toBeUndefined();
+    expect(calls).toHaveLength(0);
   });
 });

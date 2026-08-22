@@ -98,7 +98,12 @@ export interface SetLanguageRequest {
  */
 export type StreamMessage =
   | { type: 'CHUNK'; text: string }
-  | { type: 'DONE'; fullText: string }
+  | {
+      type: 'DONE';
+      fullText: string;
+      /** The model ran out of room; the text is real but stops early. */
+      truncated?: boolean;
+    }
   | { type: 'ERROR'; message: string };
 
 /**

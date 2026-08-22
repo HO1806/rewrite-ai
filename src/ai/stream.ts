@@ -25,9 +25,20 @@ export type DeltaExtractor = (frame: unknown) => string | null;
  */
 export type ErrorExtractor = (frame: unknown) => string | null;
 
+/**
+ * True when a frame says generation stopped because it ran out of room.
+ *
+ * Not an error — the text produced so far is real and usable — but the user has
+ * to be told, or a rewrite that stops mid-sentence looks like the model's
+ * considered answer. Every dialect reports this differently and none of them
+ * treats it as a failure, which is why it was invisible.
+ */
+export type TruncationDetector = (frame: unknown) => boolean;
+
 export interface StreamHandlers {
   extractDelta: DeltaExtractor;
   extractError?: ErrorExtractor;
+  isTruncated?: TruncationDetector;
 }
 
 /** The `{ error: { message } }` shape used by OpenAI, Groq, OpenRouter and Anthropic. */
@@ -126,6 +137,7 @@ export async function* parseSSEStream(
   providerLabel: string,
   handlers: StreamHandlers,
   signal?: AbortSignal,
+  onTruncated?: () => void,
 ): AsyncGenerator<string, void, unknown> {
   await assertResponseOk(response, providerLabel);
 
@@ -148,14 +160,14 @@ export async function* parseSSEStream(
         const frame = readSSEEvent(event);
         if (frame === undefined) continue;
         if (frame === DONE) return;
-        yield* emitFrame(frame, providerLabel, handlers);
+        yield* emitFrame(frame, providerLabel, handlers, onTruncated);
       }
     }
 
     // Providers that end without a trailing blank line leave a final event here.
     const trailing = readSSEEvent(buffer);
     if (trailing !== undefined && trailing !== DONE) {
-      yield* emitFrame(trailing, providerLabel, handlers);
+      yield* emitFrame(trailing, providerLabel, handlers, onTruncated);
     }
   } catch (err: unknown) {
     throw toStreamError(err, providerLabel, signal);
@@ -170,6 +182,7 @@ export async function* parseNDJSONStream(
   providerLabel: string,
   handlers: StreamHandlers,
   signal?: AbortSignal,
+  onTruncated?: () => void,
 ): AsyncGenerator<string, void, unknown> {
   await assertResponseOk(response, providerLabel);
 
@@ -187,11 +200,11 @@ export async function* parseNDJSONStream(
       buffer = lines.pop() ?? '';
 
       for (const line of lines) {
-        yield* emitJsonLine(line, providerLabel, handlers);
+        yield* emitJsonLine(line, providerLabel, handlers, onTruncated);
       }
     }
 
-    yield* emitJsonLine(buffer, providerLabel, handlers);
+    yield* emitJsonLine(buffer, providerLabel, handlers, onTruncated);
   } catch (err: unknown) {
     throw toStreamError(err, providerLabel, signal);
   } finally {
@@ -240,8 +253,13 @@ function* emitFrame(
   frame: unknown,
   providerLabel: string,
   handlers: StreamHandlers,
+  onTruncated?: () => void,
 ): Generator<string, void, unknown> {
   if (frame === undefined) return;
+
+  // Checked before the error hook: running out of room is not a failure, and the
+  // frame that reports it usually carries the last of the text too.
+  if (handlers.isTruncated?.(frame)) onTruncated?.();
 
   const errorMessage = handlers.extractError?.(frame);
   if (errorMessage) {
@@ -259,10 +277,16 @@ function* emitJsonLine(
   line: string,
   providerLabel: string,
   handlers: StreamHandlers,
+  onTruncated?: () => void,
 ): Generator<string, void, unknown> {
   const trimmed = line.trim();
   if (!trimmed) return;
-  yield* emitFrame(safeJsonParse(trimmed), providerLabel, handlers);
+  yield* emitFrame(
+    safeJsonParse(trimmed),
+    providerLabel,
+    handlers,
+    onTruncated,
+  );
 }
 
 function toStreamError(
@@ -319,6 +343,42 @@ export const extractGeminiError: ErrorExtractor = (frame) => {
 /** Ollama reports failures as `{"error": "..."}` on an otherwise fine stream. */
 export const extractOllamaError: ErrorExtractor = (frame) =>
   digString(frame, 'error') ?? null;
+
+/**
+ * The text of a non-streaming completion, or a clear failure.
+ *
+ * `?? ''` used to stand here, which turned an API shape change or a model
+ * refusal — OpenAI puts a refusal in `message.refusal` and leaves `content`
+ * null — into a successful, empty rewrite. An absent path is a malformed
+ * response and says so; only a genuinely empty string passes through.
+ */
+export function requireContent(value: unknown, providerLabel: string): string {
+  // Takes the raw `dig` result, not `digString`, which folds the empty string
+  // into `undefined` — and telling those two apart is the entire job here.
+  if (typeof value !== 'string') {
+    throw new AIProviderError(
+      `${providerLabel} returned a response with no text where content was expected.`,
+      'PROVIDER_ERROR',
+    );
+  }
+  return value;
+}
+
+/** OpenAI, Groq and OpenRouter: `finish_reason: 'length'`. */
+export const isOpenAITruncated: TruncationDetector = (frame) =>
+  digString(frame, 'choices', 0, 'finish_reason') === 'length';
+
+/** Anthropic reports the stop reason on its `message_delta` event. */
+export const isAnthropicTruncated: TruncationDetector = (frame) =>
+  digString(frame, 'delta', 'stop_reason') === 'max_tokens';
+
+/** Gemini, whose error extractor deliberately treats this as a non-error. */
+export const isGeminiTruncated: TruncationDetector = (frame) =>
+  digString(frame, 'candidates', 0, 'finishReason') === 'MAX_TOKENS';
+
+/** Ollama's final NDJSON frame carries `done_reason`. */
+export const isOllamaTruncated: TruncationDetector = (frame) =>
+  digString(frame, 'done_reason') === 'length';
 
 /** Anthropic wraps deltas in typed events; only content_block_delta carries text. */
 export const extractAnthropicDelta: DeltaExtractor = (frame) => {

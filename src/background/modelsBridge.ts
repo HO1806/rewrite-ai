@@ -28,7 +28,16 @@ function configFrom(
 }
 
 export function registerModelsBridge(): void {
-  chrome.runtime.onMessage.addListener((raw, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((raw, sender, sendResponse) => {
+    /**
+     * Extension surfaces only. `sender.tab` is set for a content script and
+     * absent for the options page or popup, and this listener hands out a
+     * worker-privileged fetch — including to loopback addresses a page cannot
+     * reach itself. Not currently reachable from a page, since nothing exposes a
+     * route into the isolated world; this keeps it that way.
+     */
+    if (sender.tab) return undefined;
+
     const parsed = listModelsRequestSchema.safeParse(raw);
     if (!parsed.success) return undefined;
 

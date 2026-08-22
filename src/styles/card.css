@@ -229,6 +229,23 @@
   border-color: var(--border-strong);
 }
 
+/* ── Notices ── */
+
+/* Says the suggestion is incomplete without hiding it: the text produced before
+   the limit is real, and usually most of the rewrite. */
+.card__notice {
+  flex: 0 0 auto;
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--text-secondary);
+  background-color: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+}
+
 /* ── Action bar ── */
 
 /* Pinned, like the header. Replace being reachable is the whole point of the

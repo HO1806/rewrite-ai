@@ -68,17 +68,25 @@ describe('buildProviderConfig', () => {
     },
   );
 
-  it('passes a base URL through for openai when one is set', () => {
-    const config = buildProviderConfig(
-      settings({ provider: 'openai', baseUrl: 'https://proxy.test/v1' }),
-    );
-    expect(config).toMatchObject({
-      provider: 'openai',
-      baseUrl: 'https://proxy.test/v1',
-    });
+  /**
+   * openai used to forward a stored base URL, on the reading that it enables
+   * OpenAI-compatible proxies. It cannot: the options form renders the field
+   * only when the descriptor says `needsBaseUrl`, and `handleProviderChange`
+   * blanks the value when you switch to a provider that does not — so no
+   * sequence of clicks produces an openai base URL. What survived was a route
+   * for a hand-edited or corrupted stored value to redirect a request carrying
+   * the user's key to a host they never chose. `custom` is the supported way to
+   * point at a proxy, and it demands the URL explicitly.
+   */
+  it('ignores a stored base URL for openai, which cannot legitimately have one', () => {
+    expect(
+      buildProviderConfig(
+        settings({ provider: 'openai', baseUrl: 'https://proxy.test/v1' }),
+      ),
+    ).not.toHaveProperty('baseUrl');
   });
 
-  it('omits an empty base URL for openai so the default host applies', () => {
+  it('still reaches the default host when no base URL is stored', () => {
     expect(
       buildProviderConfig(settings({ provider: 'openai', baseUrl: '' })),
     ).not.toHaveProperty('baseUrl');

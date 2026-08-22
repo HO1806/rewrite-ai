@@ -20,6 +20,8 @@ export interface StreamState {
   text: string;
   isGenerating: boolean;
   error: string | null;
+  /** The model hit its token limit; the text is real but stops early. */
+  isTruncated: boolean;
 }
 
 export interface StartOptions {
@@ -27,7 +29,12 @@ export interface StartOptions {
   text: string;
 }
 
-const IDLE: StreamState = { text: '', isGenerating: false, error: null };
+const IDLE: StreamState = {
+  text: '',
+  isGenerating: false,
+  error: null,
+  isTruncated: false,
+};
 
 export function useStreamingRewrite(): StreamState & {
   start: (options: StartOptions) => void;
@@ -46,7 +53,7 @@ export function useStreamingRewrite(): StreamState & {
     ({ action, text }: StartOptions) => {
       // Supersede any request already in flight.
       disconnect();
-      setState({ text: '', isGenerating: true, error: null });
+      setState({ ...IDLE, isGenerating: true });
 
       // Guards against a late message from a port we have already replaced.
       const update = (apply: (previous: StreamState) => StreamState) => {
@@ -72,6 +79,7 @@ export function useStreamingRewrite(): StreamState & {
                 text: message.fullText,
                 isGenerating: false,
                 error: null,
+                isTruncated: message.truncated === true,
               }));
               // Disconnect, do not merely forget: a dropped-but-connected port
               // leaves a live StreamSession in the worker and keeps MV3 from

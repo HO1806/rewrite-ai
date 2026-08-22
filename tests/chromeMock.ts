@@ -44,6 +44,15 @@ export interface ChromeMock {
   /** Set to make chrome.runtime.sendMessage reject. */
   runtimeMessageError: string | null;
   /**
+   * The sender handed to `runtime.onMessage` listeners.
+   *
+   * Defaults to an extension surface — the popup or options page — which is what
+   * Chrome reports for a message from another extension page: an id and no tab.
+   * Set `tab` to speak as a content script instead, which is the distinction the
+   * bridges use to decide whether to answer at all.
+   */
+  messageSender: chrome.runtime.MessageSender;
+  /**
    * Models the real content-script loader: injection resolves immediately while
    * the module graph is still loading, so the script only starts answering after
    * this many `sendMessage` attempts. The previous mock cleared `tabMessageError`
@@ -51,6 +60,15 @@ export interface ChromeMock {
    * healthy — the resend in `tabs.ts` never actually won that race in a browser.
    */
   attemptsUntilContentScriptReady: number | null;
+  /** Frame ids `executeScript` reports having injected into. */
+  injectedFrameIds: number[];
+  /**
+   * Per-frame readiness: `{ 3: 2 }` makes frame 3 reject its first two pings.
+   *
+   * Models the case the all-frames handshake exists for — a light top frame that
+   * answers immediately beside a heavier iframe that is still importing.
+   */
+  frameReadyAfter: Record<number, number>;
   manifest: chrome.runtime.Manifest;
   lastError: { message: string } | undefined;
 }
@@ -150,7 +168,10 @@ export function installChromeMock(): ChromeMock {
     tabMessageError: null,
     executeScriptError: null,
     runtimeMessageError: null,
+    messageSender: { id: 'mock-id' },
     attemptsUntilContentScriptReady: null,
+    injectedFrameIds: [],
+    frameReadyAfter: {},
     manifest: {
       manifest_version: 3,
       name: 'Rewrite AI',
@@ -218,7 +239,7 @@ export function installChromeMock(): ChromeMock {
           let claimedAsync = false;
           for (const listener of [...state.listeners.message]) {
             // Chrome's contract: returning true means "I will respond later".
-            if (listener(message, { id: 'mock-id' }, respond) === true) {
+            if (listener(message, state.messageSender, respond) === true) {
               claimedAsync = true;
             }
           }
@@ -252,6 +273,18 @@ export function installChromeMock(): ChromeMock {
         (tabId: number, message: unknown, options?: { frameId?: number }) => {
           state.tabMessageAttempts += 1;
 
+          // Per-frame readiness, counted independently of the tab-wide counter.
+          const frameId = options?.frameId;
+          if (frameId !== undefined && frameId in state.frameReadyAfter) {
+            const remaining = state.frameReadyAfter[frameId] ?? 0;
+            if (remaining > 0) {
+              state.frameReadyAfter[frameId] = remaining - 1;
+              return Promise.reject(
+                new Error('Could not establish connection.'),
+              );
+            }
+          }
+
           // Simulate the loader still resolving its dynamic import: injection
           // has returned but the listener is not registered yet.
           if (
@@ -280,7 +313,12 @@ export function installChromeMock(): ChromeMock {
           if (state.executeScriptError)
             return Promise.reject(new Error(state.executeScriptError));
           state.executedScripts.push(injection);
-          return Promise.resolve([]);
+          return Promise.resolve(
+            state.injectedFrameIds.map((frameId) => ({
+              frameId,
+              result: undefined,
+            })),
+          );
         },
       ),
     },

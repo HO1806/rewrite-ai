@@ -63,7 +63,7 @@ export async function sendMessageToTab(
     const injected = await injectContentScript(tabId);
     if (!injected.ok) return injected;
 
-    const ready = await waitForContentScript(tabId, target);
+    const ready = await waitForContentScript(tabId, target, injected.frameIds);
     if (!ready) {
       return {
         ok: false,
@@ -96,20 +96,54 @@ function dispatch(
 }
 
 /** Poll PING until the freshly injected script answers, or give up. */
+/**
+ * Poll until the content script answers — in **every** frame, not just one.
+ *
+ * A broadcast without a frame id reaches every frame, and this used to return as
+ * soon as any of them replied. On a page with a light top frame and a heavier
+ * iframe, the light one answers on the first attempt and the real message goes
+ * out before the iframe is listening — so a user who selected text inside the
+ * iframe presses the shortcut and nothing happens, while delivery reports
+ * success. The shortcut broadcasts, so the frame that answers first is rarely
+ * the frame that matters.
+ *
+ * Best-effort by design: a frame that never answers (an empty `about:blank`, a
+ * cross-origin child that failed to inject) must not hold up the frame that
+ * does, so the budget still bounds the wait and delivery proceeds if anyone is
+ * listening.
+ */
 async function waitForContentScript(
   tabId: number,
   target: { frameId: number } | undefined,
+  frameIds: readonly number[],
 ): Promise<boolean> {
+  // A frame-targeted send only ever cares about that frame.
+  const pending = new Set<number | undefined>(
+    target ? [target.frameId] : frameIds.length > 0 ? frameIds : [undefined],
+  );
+  let anyReady = false;
+
   for (const delay of PING_DELAYS_MS) {
     if (delay > 0) await sleep(delay);
-    try {
-      await dispatch(tabId, { type: 'PING' }, target);
-      return true;
-    } catch {
-      // Not listening yet; keep waiting.
+
+    for (const frameId of [...pending]) {
+      try {
+        await dispatch(
+          tabId,
+          { type: 'PING' },
+          frameId === undefined ? undefined : { frameId },
+        );
+        pending.delete(frameId);
+        anyReady = true;
+      } catch {
+        // Not listening yet; keep waiting on this one.
+      }
     }
+
+    if (pending.size === 0) return true;
   }
-  return false;
+
+  return anyReady;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -122,7 +156,11 @@ function sleep(ms: number): Promise<void> {
  * The script paths are read from the manifest at runtime, so they stay correct
  * across rebuilds regardless of how the bundler names its chunks.
  */
-async function injectContentScript(tabId: number): Promise<DeliveryResult> {
+type InjectionOutcome =
+  | { ok: true; frameIds: readonly number[] }
+  | Extract<DeliveryResult, { ok: false }>;
+
+async function injectContentScript(tabId: number): Promise<InjectionOutcome> {
   const files = contentScriptFiles();
 
   if (files.length === 0) {
@@ -134,11 +172,13 @@ async function injectContentScript(tabId: number): Promise<DeliveryResult> {
   }
 
   try {
-    await chrome.scripting.executeScript({
+    const results = await chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
       files,
     });
-    return { ok: true };
+    // One result per frame injected; their ids are what readiness is measured
+    // against.
+    return { ok: true, frameIds: results.map((result) => result.frameId) };
   } catch (err: unknown) {
     const detail = getErrorMessage(err);
     // chrome://, the Web Store and PDF viewers cannot be scripted at all.

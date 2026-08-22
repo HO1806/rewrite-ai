@@ -415,6 +415,9 @@ async function verifySubstitution(
   return squash(before) === after ? 'failed' : 'dirty';
 }
 
+/** How long to wait for a frame that a background tab will never deliver. */
+const HIDDEN_TAB_FRAME_TIMEOUT_MS = 50;
+
 /** Whitespace-insensitive comparison, for text that crosses a DOM boundary. */
 function squash(text: string): string {
   return text.replace(/\s+/g, '');
@@ -424,8 +427,25 @@ function nextTask(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/**
+ * A frame, or a short wait if frames are not coming.
+ *
+ * `requestAnimationFrame` is suspended in a background tab, so switching tabs in
+ * the moment after Replace left the verification parked indefinitely — and with
+ * it the card's re-entry guard, which is only released when this resolves.
+ */
 function nextFrame(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    requestAnimationFrame(done);
+    setTimeout(done, HIDDEN_TAB_FRAME_TIMEOUT_MS);
+  });
 }
 
 /** True when both of a range's boundary nodes are still in the document. */

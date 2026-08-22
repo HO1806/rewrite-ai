@@ -122,3 +122,36 @@ describe('describeDeliveryFailure', () => {
     );
   });
 });
+
+/**
+ * The shortcut broadcasts to every frame, and the frame that answers first is
+ * rarely the frame holding the selection.
+ */
+describe('readiness across frames', () => {
+  it('waits for every injected frame, not the first to answer', async () => {
+    // Only the first send fails, which is what triggers injection.
+    chromeMock.attemptsUntilContentScriptReady = 1;
+    chromeMock.injectedFrameIds = [0, 3];
+    // The top frame is ready at once; the iframe needs three more attempts.
+    chromeMock.frameReadyAfter = { 0: 0, 3: 3 };
+
+    // The first send fails, which triggers injection and the handshake.
+    const result = await sendMessageToTab(1, MESSAGE);
+
+    expect(result.ok).toBe(true);
+    // Every frame was pinged until it answered, so the slow one is listening
+    // before the real message goes out.
+    expect(chromeMock.frameReadyAfter[3]).toBe(0);
+  });
+
+  it('still delivers when a frame never answers', async () => {
+    chromeMock.attemptsUntilContentScriptReady = 1;
+    chromeMock.injectedFrameIds = [0, 9];
+    // Frame 9 is an empty about:blank that will never register a listener.
+    chromeMock.frameReadyAfter = { 0: 0, 9: 999 };
+
+    const result = await sendMessageToTab(1, MESSAGE);
+
+    expect(result.ok).toBe(true);
+  });
+});

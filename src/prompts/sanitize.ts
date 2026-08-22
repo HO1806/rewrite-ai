@@ -85,6 +85,17 @@ function stripDelimiter(text: string, tag: string): string {
 /**
  * Remove a matched pair of quotes the model wrapped the whole result in.
  *
+ * **Known residual risk, accepted deliberately.** Nothing here can tell an echoed
+ * wrapper from a result that is genuinely a quoted sentence — a rewrite of a
+ * claim into `"We shall never surrender."` looks identical to the model quoting
+ * itself, and this strips it. Requiring independent evidence (an echoed
+ * delimiter in the same pass) was tried and rejected: it stopped the common case
+ * — quotes with no tag, which is most of them — to avoid a rarer one. The
+ * asymmetry decides it. Stray quotes left in are visible and a user deletes
+ * them; quotes wrongly removed are a silent change to their meaning, but only
+ * when all four conditions below coincide, which needs an unquoted source and a
+ * fully-quoted result containing no other quotation.
+ *
  * Four conditions, and each one is load-bearing:
  * the ends must be a matching pair; the source must not have started with that
  * same character, or a legitimately quoted selection would come back unquoted;

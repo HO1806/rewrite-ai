@@ -67,7 +67,8 @@ export function RewriteCard({
   const gearRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
 
-  const { text, isGenerating, error, start } = useStreamingRewrite();
+  const { text, isGenerating, error, isTruncated, start } =
+    useStreamingRewrite();
   const position = useAnchoredPosition(selectionInfo, cardRef);
 
   // Kick off the initial rewrite. `start` is stable, so this runs once.
@@ -195,6 +196,13 @@ export function RewriteCard({
       )}
 
       <StreamOutput text={text} isGenerating={isGenerating} error={error} />
+
+      {isTruncated && !error && (
+        <p className="card__notice" role="status">
+          Cut off — the model reached its length limit. Shorten the selection
+          and try again for a complete rewrite.
+        </p>
+      )}
 
       <CardActionBar
         canAct={canAct}

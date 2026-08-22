@@ -9,10 +9,12 @@ import {
   assertResponseOk,
   extractAnthropicDelta,
   extractStandardError,
+  isAnthropicTruncated,
+  requireContent,
   parseSSEStream,
   readJsonBody,
 } from '../stream';
-import { collectModelIds, digString } from '../json';
+import { collectModelIds, dig, digString } from '../json';
 import { requestJson } from './base';
 
 export const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
@@ -20,6 +22,7 @@ export const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
 const STREAM_HANDLERS: StreamHandlers = {
   extractDelta: extractAnthropicDelta,
   extractError: extractStandardError,
+  isTruncated: isAnthropicTruncated,
 };
 
 export class AnthropicProvider implements AIProvider {
@@ -97,10 +100,19 @@ export class AnthropicProvider implements AIProvider {
     if (!options.stream) {
       await assertResponseOk(response, this.name);
       const data = await readJsonBody(response, this.name);
-      yield digString(data, 'content', 0, 'text') ?? '';
+      if (digString(data, 'stop_reason') === 'max_tokens') {
+        options.onTruncated?.();
+      }
+      yield requireContent(dig(data, 'content', 0, 'text'), this.name);
       return;
     }
 
-    yield* parseSSEStream(response, this.name, STREAM_HANDLERS, options.signal);
+    yield* parseSSEStream(
+      response,
+      this.name,
+      STREAM_HANDLERS,
+      options.signal,
+      options.onTruncated,
+    );
   }
 }

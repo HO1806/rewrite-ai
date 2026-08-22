@@ -49,6 +49,14 @@ export interface RewriteOptions {
    * streaming from the (paid) provider to completion in the background.
    */
   signal?: AbortSignal;
+  /**
+   * Called when the model stopped because it hit the token limit.
+   *
+   * Not an error: the text produced is real and worth keeping, so the request
+   * succeeds and the card says it was cut off. Reported per request rather than
+   * per provider because only the caller knows what to do about it.
+   */
+  onTruncated?: () => void;
 }
 
 /**

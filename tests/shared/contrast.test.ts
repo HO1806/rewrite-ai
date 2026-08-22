@@ -67,6 +67,8 @@ function contrast(foreground: Oklch, background: Oklch): number {
 }
 
 const AA_TEXT = 4.5;
+/** SC 1.4.11: a control's boundary needs 3:1, not 4.5:1. */
+const AA_NON_TEXT = 3;
 
 describe.each(['dark', 'light'] as const)('%s theme meets WCAG AA', (theme) => {
   const base = () => token('surface-base', theme);
@@ -88,5 +90,21 @@ describe.each(['dark', 'light'] as const)('%s theme meets WCAG AA', (theme) => {
     expect(
       contrast(token('text-on-accent', theme), token('accent', theme)),
     ).toBeGreaterThanOrEqual(AA_TEXT);
+  });
+
+  // The secondary buttons have no fill of their own — the border is the whole
+  // control boundary, so 1.4.11 applies to it. In light theme it shipped at
+  // 2.00:1 and the buttons read as floating labels.
+  it.each([
+    ['the secondary button outline', 'border-strong', base],
+    [
+      'the secondary button outline on the output area',
+      'border-strong',
+      raised,
+    ],
+  ])('%s', (_label, name, background) => {
+    expect(contrast(token(name, theme), background())).toBeGreaterThanOrEqual(
+      AA_NON_TEXT,
+    );
   });
 });

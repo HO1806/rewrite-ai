@@ -18,11 +18,13 @@ import {
   StreamHandlers,
   assertResponseOk,
   extractStandardError,
+  isOpenAITruncated,
+  requireContent,
   parseSSEStream,
   readJsonBody,
   throwIfAborted,
 } from '../stream';
-import { collectModelIds, digString } from '../json';
+import { collectModelIds, dig, digString } from '../json';
 import { getErrorMessage, isAbortError } from '@/shared/errors';
 
 /** Strip trailing slashes so endpoint concatenation cannot produce a double slash. */
@@ -165,7 +167,11 @@ export abstract class OpenAICompatibleProvider implements AIProvider {
     if (!options.stream) {
       await assertResponseOk(response, this.name);
       const data = await readJsonBody(response, this.name);
-      yield digString(data, 'choices', 0, 'message', 'content') ?? '';
+      if (isOpenAITruncated(data)) options.onTruncated?.();
+      yield requireContent(
+        dig(data, 'choices', 0, 'message', 'content'),
+        this.name,
+      );
       return;
     }
 
@@ -174,6 +180,7 @@ export abstract class OpenAICompatibleProvider implements AIProvider {
       this.name,
       OPENAI_STREAM_HANDLERS,
       options.signal,
+      options.onTruncated,
     );
   }
 }
@@ -182,4 +189,5 @@ const OPENAI_STREAM_HANDLERS: StreamHandlers = {
   extractDelta: (frame) =>
     digString(frame, 'choices', 0, 'delta', 'content') ?? null,
   extractError: extractStandardError,
+  isTruncated: isOpenAITruncated,
 };

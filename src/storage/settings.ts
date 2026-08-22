@@ -86,7 +86,7 @@ export async function loadSettings(): Promise<Settings> {
     return initial;
   }
 
-  // Merge stored values over defaults, then validate
+  // Merge stored values over defaults, then validate.
   const merged = { ...DEFAULT_SETTINGS, ...(raw as Record<string, unknown>) };
   const result = settingsSchema.safeParse(merged);
 
@@ -94,15 +94,39 @@ export async function loadSettings(): Promise<Settings> {
     return result.data;
   }
 
-  // If validation fails, self-heal by overwriting storage with valid defaults.
-  // Only the failing field paths are reported — never the values, which would
-  // put the API key in the console.
-  console.warn(
-    '[Rewrite AI] Invalid stored settings; resetting to defaults. Invalid fields:',
-    result.error.issues.map((issue) => issue.path.join('.')).join(', '),
+  /**
+   * Heal only the fields that failed.
+   *
+   * This used to replace the whole object, which meant one bad value — a base
+   * URL a later refinement tightened, a number outside a narrowed range, a
+   * provider id that was removed — silently took the user's **API key** with it.
+   * They would find the extension apparently reset itself, with the reason
+   * visible only in a console nobody has open.
+   *
+   * Field paths are logged, never values: the object holds the key.
+   */
+  const invalid = new Set(
+    result.error.issues
+      .map((issue) => issue.path[0])
+      .filter((key): key is string => typeof key === 'string'),
   );
 
-  const healed = defaults();
+  console.warn(
+    '[Rewrite AI] Invalid stored settings; resetting these fields to defaults:',
+    [...invalid].join(', '),
+  );
+
+  const repaired: Record<string, unknown> = { ...merged };
+  for (const key of invalid) {
+    repaired[key] = DEFAULT_SETTINGS[key as keyof typeof DEFAULT_SETTINGS];
+  }
+
+  const second = settingsSchema.safeParse(repaired);
+  // A field can fail for a reason its own default cannot fix — a cross-field
+  // refinement, or a default that is itself invalid. Falling back whole is right
+  // then, because there is nothing left to preserve selectively.
+  const healed = second.success ? second.data : defaults();
+
   await setStorage(STORAGE_KEYS.SETTINGS, healed);
   return healed;
 }

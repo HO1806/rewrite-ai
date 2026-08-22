@@ -28,7 +28,10 @@
 
   --border-subtle: oklch(31% 0 0);
   --border-default: oklch(38% 0 0);
-  --border-strong: oklch(46% 0 0);
+  /* 3:1 against `--surface-raised`, the tighter of the two surfaces it sits on
+     — SC 1.4.11, since these buttons have no fill and the border *is* the
+     control boundary. It shipped at 2.05:1 here and 2.00:1 in light. */
+  --border-strong: oklch(55% 0 0);
 
   --text-primary: oklch(97% 0 0);
   --text-secondary: oklch(80% 0 0);
@@ -111,7 +114,7 @@
 
   --border-subtle: oklch(92% 0.008 250);
   --border-default: oklch(87% 0.01 250);
-  --border-strong: oklch(78% 0.015 250);
+  --border-strong: oklch(65% 0.015 250);
 
   --text-primary: oklch(24% 0.015 262);
   --text-secondary: oklch(44% 0.02 258);

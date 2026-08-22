@@ -63,6 +63,50 @@ describe('loadSettings', () => {
     expect(chromeMock.storage[STORAGE_KEYS.SETTINGS]).toEqual(valid());
   });
 
+  /**
+   * The reason healing is per-field. Replacing the whole object meant one bad
+   * value — a base URL a later refinement tightened, a provider id that was
+   * removed — silently took the user's API key with it, and they found the
+   * extension apparently reset itself for no visible reason.
+   */
+  it.each([
+    ['an unknown provider', { provider: 'skynet' }],
+    ['an out-of-range temperature', { temperature: 99 }],
+    ['a disallowed base URL', { baseUrl: 'http://evil.test' }],
+  ])('keeps everything valid when %s is corrupt', async (_label, corrupt) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    chromeMock.storage[STORAGE_KEYS.SETTINGS] = {
+      ...DEFAULT_SETTINGS,
+      apiKey: 'sk-worth-keeping',
+      model: 'a-deliberate-choice',
+      translateLanguage: 'German',
+      ...corrupt,
+    };
+
+    const loaded = await loadSettings();
+
+    expect(loaded.apiKey).toBe('sk-worth-keeping');
+    expect(loaded.model).toBe('a-deliberate-choice');
+    expect(loaded.translateLanguage).toBe('German');
+    // Only the corrupt field went back to its default.
+    const [field] = Object.keys(corrupt);
+    expect(loaded[field as keyof typeof loaded]).toEqual(
+      DEFAULT_SETTINGS[field as keyof typeof DEFAULT_SETTINGS],
+    );
+  });
+
+  it('names only the fields it reset', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    chromeMock.storage[STORAGE_KEYS.SETTINGS] = {
+      ...DEFAULT_SETTINGS,
+      temperature: 99,
+    };
+
+    await loadSettings();
+
+    expect(String(warn.mock.calls[0])).toContain('temperature');
+  });
+
   it('never logs stored values when reporting invalid settings', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     chromeMock.storage[STORAGE_KEYS.SETTINGS] = {

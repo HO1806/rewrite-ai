@@ -8,6 +8,8 @@ import {
   StreamHandlers,
   assertResponseOk,
   extractGeminiError,
+  isGeminiTruncated,
+  requireContent,
   parseSSEStream,
   readJsonBody,
 } from '../stream';
@@ -21,6 +23,7 @@ const STREAM_HANDLERS: StreamHandlers = {
   extractDelta: (frame) =>
     digString(frame, 'candidates', 0, 'content', 'parts', 0, 'text') ?? null,
   extractError: extractGeminiError,
+  isTruncated: isGeminiTruncated,
 };
 
 export class GeminiProvider implements AIProvider {
@@ -121,11 +124,20 @@ export class GeminiProvider implements AIProvider {
         throw new AIProviderError(`${this.name}: ${blocked}`, 'PROVIDER_ERROR');
       }
 
-      yield digString(data, 'candidates', 0, 'content', 'parts', 0, 'text') ??
-        '';
+      if (isGeminiTruncated(data)) options.onTruncated?.();
+      yield requireContent(
+        dig(data, 'candidates', 0, 'content', 'parts', 0, 'text'),
+        this.name,
+      );
       return;
     }
 
-    yield* parseSSEStream(response, this.name, STREAM_HANDLERS, options.signal);
+    yield* parseSSEStream(
+      response,
+      this.name,
+      STREAM_HANDLERS,
+      options.signal,
+      options.onTruncated,
+    );
   }
 }

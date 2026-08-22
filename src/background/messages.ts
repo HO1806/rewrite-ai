@@ -116,7 +116,11 @@ export type ListModelsResponse = z.infer<typeof listModelsResponseSchema>;
 /** background → content, over the streaming port */
 export const streamMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('CHUNK'), text: z.string() }),
-  z.object({ type: z.literal('DONE'), fullText: z.string() }),
+  z.object({
+    type: z.literal('DONE'),
+    fullText: z.string(),
+    truncated: z.boolean().optional(),
+  }),
   z.object({ type: z.literal('ERROR'), message: z.string() }),
 ]) satisfies z.ZodType<StreamMessage>;
 

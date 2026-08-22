@@ -3,10 +3,12 @@ import {
   StreamHandlers,
   assertResponseOk,
   extractOllamaError,
+  isOllamaTruncated,
+  requireContent,
   parseNDJSONStream,
   readJsonBody,
 } from '../stream';
-import { collectModelIds, digString } from '../json';
+import { collectModelIds, dig, digString } from '../json';
 import { normalizeBaseUrl, requestJson } from './base';
 
 export const OLLAMA_BASE_URL = 'http://localhost:11434';
@@ -14,6 +16,7 @@ export const OLLAMA_BASE_URL = 'http://localhost:11434';
 const STREAM_HANDLERS: StreamHandlers = {
   extractDelta: (frame) => digString(frame, 'response') ?? null,
   extractError: extractOllamaError,
+  isTruncated: isOllamaTruncated,
 };
 
 export class OllamaProvider implements AIProvider {
@@ -77,7 +80,8 @@ export class OllamaProvider implements AIProvider {
     if (!options.stream) {
       await assertResponseOk(response, this.name);
       const data = await readJsonBody(response, this.name);
-      yield digString(data, 'response') ?? '';
+      if (isOllamaTruncated(data)) options.onTruncated?.();
+      yield requireContent(dig(data, 'response'), this.name);
       return;
     }
 
@@ -86,6 +90,7 @@ export class OllamaProvider implements AIProvider {
       this.name,
       STREAM_HANDLERS,
       options.signal,
+      options.onTruncated,
     );
   }
 }

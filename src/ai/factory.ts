@@ -1,4 +1,5 @@
 import type { ProviderType } from '@/shared/types';
+import { getProvider } from '@/shared/constants';
 import type { Settings } from '@/storage/settings';
 import { AIProvider, AIProviderError, ProviderConfig } from './types';
 import { CustomOpenAIProvider, OpenAIProvider } from './providers/openai';
@@ -52,7 +53,16 @@ export function buildProviderConfig(settings: Settings): ProviderConfig {
         provider,
         apiKey,
         model,
-        ...(settings.baseUrl ? { baseUrl: settings.baseUrl } : {}),
+        /**
+         * Honoured only where the provider actually uses one. The options form
+         * clears `baseUrl` when you switch to a provider that does not need it,
+         * so a leftover value can now only arrive by storage corruption — and
+         * this is the choke point where it would otherwise redirect a request
+         * carrying the user's key.
+         */
+        ...(settings.baseUrl && getProvider(provider).needsBaseUrl
+          ? { baseUrl: settings.baseUrl }
+          : {}),
       };
     case 'custom': {
       if (!settings.baseUrl) {

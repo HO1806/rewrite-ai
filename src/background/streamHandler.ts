@@ -142,11 +142,21 @@ class StreamSession {
       await updateSettings({ lastAction: request.action }).catch(() => {});
     }
 
+    /**
+     * Truncation is reported, not thrown. The text produced before the limit is
+     * real and usually most of the rewrite, so discarding it to raise an error
+     * would cost the user more than the warning gains them.
+     */
+    let wasTruncated = false;
+
     const generator = provider.rewrite(prompt.user, prompt.system, {
       temperature: settings.temperature,
       maxTokens: settings.maxTokens,
       stream: settings.stream,
       signal,
+      onTruncated: () => {
+        wasTruncated = true;
+      },
     });
 
     let fullText = '';
@@ -180,7 +190,11 @@ class StreamSession {
       );
     }
 
-    this.post({ type: 'DONE', fullText: cleaned });
+    this.post({
+      type: 'DONE',
+      fullText: cleaned,
+      ...(wasTruncated ? { truncated: true } : {}),
+    });
   }
 
   /** Abort the in-flight request, if any. */
