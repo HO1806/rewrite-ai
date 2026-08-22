@@ -11,7 +11,7 @@ import { RewriteCard } from '@/content/components/RewriteCard';
 import { registerStreamHandler } from '@/background/streamHandler';
 import { DEFAULT_SETTINGS } from '@/shared/constants';
 import { saveSettings, settingsSchema } from '@/storage/settings';
-import type { SelectionInfo } from '@/shared/types';
+import type { EditableSelection } from '@/shared/types';
 import { sseResponse, stubFetch, stubFetchEach } from '../helpers/http';
 
 /**
@@ -28,6 +28,17 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+/** A range over page text with no editing host: nothing can write into it. */
+function rangeOver(text: string): Range {
+  const paragraph = document.createElement('p');
+  paragraph.textContent = text;
+  document.body.appendChild(paragraph);
+
+  const range = document.createRange();
+  range.selectNodeContents(paragraph.firstChild!);
+  return range;
+}
+
 function frames(...contents: string[]): string[] {
   return [
     ...contents.map(
@@ -38,15 +49,14 @@ function frames(...contents: string[]): string[] {
   ];
 }
 
-function selectionIn(field: HTMLTextAreaElement): SelectionInfo {
+function selectionIn(field: HTMLTextAreaElement): EditableSelection {
   return {
+    kind: 'field',
     text: field.value,
-    range: null,
     element: field,
-    elementType: 'textarea',
     position: { top: 20, left: 20 },
-    selectionStart: 0,
-    selectionEnd: field.value.length,
+    start: 0,
+    end: field.value.length,
   };
 }
 
@@ -201,8 +211,11 @@ describe('RewriteCard', () => {
   });
 
   /**
-   * The card must not claim a replacement it did not make. A non-editable
-   * selection can only be copied.
+   * The card must not claim a replacement it did not make.
+   *
+   * The selection here is `rich` over a range with no editing host — the shape
+   * an editor that refuses the edit leaves behind. It used to be a `static`
+   * selection, which the card can no longer be handed at all.
    */
   it('says "Copied instead" when the selection cannot be replaced', async () => {
     await seedSettings();
@@ -215,13 +228,10 @@ describe('RewriteCard', () => {
     render(
       <RewriteCard
         selectionInfo={{
+          kind: 'rich',
           text: 'read only',
-          range: null,
-          element: null,
-          elementType: 'unknown',
+          range: rangeOver('read only'),
           position: { top: 0, left: 0 },
-          selectionStart: null,
-          selectionEnd: null,
         }}
         initialAction="improve"
         initialLanguage="English"

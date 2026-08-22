@@ -9,10 +9,10 @@
 import { useEffect, useState } from 'react';
 import { positionBelow } from '../selection';
 import { CARD } from '@/shared/constants';
-import type { CardPosition, SelectionInfo } from '@/shared/types';
+import type { CardPosition, EditableSelection } from '@/shared/types';
 
 export function useAnchoredPosition(
-  selectionInfo: SelectionInfo,
+  selectionInfo: EditableSelection,
   cardRef: React.RefObject<HTMLElement>,
 ): CardPosition {
   const [position, setPosition] = useState<CardPosition>(
@@ -68,16 +68,14 @@ export function useAnchoredPosition(
 
 /** A function that re-measures the selection's rect, or null if unmeasurable. */
 function resolveAnchor(
-  selectionInfo: SelectionInfo,
+  selectionInfo: EditableSelection,
 ): (() => DOMRect | null) | null {
-  const { element, range } = selectionInfo;
-
-  if (range) {
+  if (selectionInfo.kind === 'rich') {
+    const { range } = selectionInfo;
     return () =>
       range.startContainer.isConnected ? range.getBoundingClientRect() : null;
   }
-  if (element) {
-    return () => (element.isConnected ? element.getBoundingClientRect() : null);
-  }
-  return null;
+
+  const { element } = selectionInfo;
+  return () => (element.isConnected ? element.getBoundingClientRect() : null);
 }

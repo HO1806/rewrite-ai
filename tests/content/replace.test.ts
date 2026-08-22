@@ -1,21 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { copyToClipboard, replaceSelectedText } from '@/content/replace';
-import type { SelectionInfo } from '@/shared/types';
+import type { EditableSelection } from '@/shared/types';
 
+/**
+ * Builds what `getEditableSelectionInfo` would have captured.
+ *
+ * Offsets default to the field's live selection because that is what the real
+ * capture does — at capture time, before the card steals focus. Tests that care
+ * about the gap between capture and replace pass them explicitly.
+ */
 function selectionFor(
   element: HTMLElement | null,
-  elementType: SelectionInfo['elementType'],
+  elementType: 'textarea' | 'input' | 'contenteditable',
   range: Range | null = null,
   offsets: { start: number; end: number } | null = null,
-): SelectionInfo {
+): EditableSelection {
+  const position = { top: 0, left: 0 };
+
+  if (elementType === 'contenteditable') {
+    if (!range) throw new Error('a rich-text selection needs a range');
+    return { kind: 'rich', text: 'old', range, position };
+  }
+
+  const field = element as HTMLInputElement | HTMLTextAreaElement;
   return {
+    kind: 'field',
     text: 'old',
-    range,
-    element,
-    elementType,
-    position: { top: 0, left: 0 },
-    selectionStart: offsets?.start ?? null,
-    selectionEnd: offsets?.end ?? null,
+    element: field,
+    position,
+    start: offsets?.start ?? field.selectionStart ?? 0,
+    end: offsets?.end ?? field.selectionEnd ?? 0,
   };
 }
 
@@ -261,23 +275,23 @@ describe('replaceSelectedText uses the offsets captured at selection time', () =
   });
 });
 
+function buildEditable(text: string): { host: HTMLElement; range: Range } {
+  const host = document.createElement('div');
+  host.setAttribute('contenteditable', 'true');
+  // jsdom does not derive isContentEditable from the attribute.
+  Object.defineProperty(host, 'isContentEditable', {
+    value: true,
+    configurable: true,
+  });
+  host.textContent = text;
+  document.body.appendChild(host);
+
+  const range = document.createRange();
+  range.selectNodeContents(host.firstChild!);
+  return { host, range };
+}
+
 describe('replaceSelectedText in a contenteditable', () => {
-  function buildEditable(text: string): { host: HTMLElement; range: Range } {
-    const host = document.createElement('div');
-    host.setAttribute('contenteditable', 'true');
-    // jsdom does not derive isContentEditable from the attribute.
-    Object.defineProperty(host, 'isContentEditable', {
-      value: true,
-      configurable: true,
-    });
-    host.textContent = text;
-    document.body.appendChild(host);
-
-    const range = document.createRange();
-    range.selectNodeContents(host.firstChild!);
-    return { host, range };
-  }
-
   it('inserts via execCommand when available', async () => {
     stubExecCommand('insert');
     const { host, range } = buildEditable('old');
@@ -514,17 +528,14 @@ describe('replaceSelectedText in a contenteditable', () => {
   });
 });
 
-describe('replaceSelectedText on a non-editable selection', () => {
-  it('copies to the clipboard and says so', async () => {
-    const outcome = await replaceSelectedText(
-      selectionFor(null, 'unknown'),
-      'new',
-    );
-
-    expect(outcome).toBe('copied');
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('new');
-  });
-
+/**
+ * There used to be a third entry here, for a selection in ordinary page text.
+ * `replaceSelectedText` now takes an `EditableSelection`, so that call no longer
+ * compiles: a static selection is refused at `getEditableSelectionInfo`, before
+ * a card ever opens, and the type says so. What it actually exercised — the
+ * clipboard fallback — is reached above by an editor that declines the edit.
+ */
+describe('when the page cannot be written to', () => {
   it('reports failure when even the clipboard is unavailable', async () => {
     Object.assign(navigator, {
       clipboard: {
@@ -533,8 +544,19 @@ describe('replaceSelectedText on a non-editable selection', () => {
     });
     document.execCommand = vi.fn(() => false) as typeof document.execCommand;
 
+    // No editing host: there is nowhere for the edit to land, so the clipboard
+    // is the only remaining route — and here that is gone too.
+    const paragraph = document.createElement('p');
+    paragraph.textContent = 'old';
+    document.body.appendChild(paragraph);
+    const range = document.createRange();
+    range.selectNodeContents(paragraph.firstChild!);
+
     await expect(
-      replaceSelectedText(selectionFor(null, 'unknown'), 'new'),
+      replaceSelectedText(
+        selectionFor(paragraph, 'contenteditable', range),
+        'new',
+      ),
     ).resolves.toBe('failed');
   });
 });

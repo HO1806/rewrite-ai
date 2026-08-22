@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useId, useRef, useState } from 'react';
-import type { RewriteAction, SelectionInfo } from '@/shared/types';
+import type { EditableSelection, RewriteAction } from '@/shared/types';
 import { useStreamingRewrite } from '@/ui/hooks/useStreamingRewrite';
 import { useTimedFlag } from '@/ui/hooks/useTimedFlag';
 import {
@@ -32,7 +32,7 @@ const CLOSE_DELAY_MS = 400;
 const COPIED_DURATION_MS = 2000;
 
 interface RewriteCardProps {
-  selectionInfo: SelectionInfo;
+  selectionInfo: EditableSelection;
   initialAction: RewriteAction;
   /** The stored translation language, resolved before the card mounts. */
   initialLanguage: string;

@@ -32,23 +32,67 @@ export interface CardPosition {
 }
 
 /** Information about the active text selection */
-export interface SelectionInfo {
-  text: string;
-  range: Range | null;
-  element: Element | null;
-  elementType: 'textarea' | 'input' | 'contenteditable' | 'unknown';
-  position: CardPosition;
+/**
+ * What the user selected, and how to write back into it.
+ *
+ * A discriminated union because the fields are correlated and were previously
+ * only correlated by convention: a flat shape with `range`, `element`,
+ * `selectionStart` and `selectionEnd` all nullable admits fifteen combinations
+ * of which three are real, and `replace.ts` recovered the correlation with a
+ * cast — narrowing by trust rather than by proof.
+ */
+export type SelectionInfo =
+  FieldSelection | RichTextSelection | StaticSelection;
+
+/**
+ * A selection that can actually be written back into.
+ *
+ * The card and `replaceSelectedText` take this, not `SelectionInfo`, so
+ * "is this editable?" is answered once — in `getEditableSelectionInfo` — and
+ * every consumer downstream has the answer in the type.
+ */
+export type EditableSelection = FieldSelection | RichTextSelection;
+
+interface SelectionBase {
+  readonly text: string;
+  /** Viewport coordinates: the card is `position: fixed`. */
+  readonly position: CardPosition;
+}
+
+/** Inside an `<input>` or `<textarea>`, addressed by offset. */
+export interface FieldSelection extends SelectionBase {
+  readonly kind: 'field';
+  readonly element: HTMLInputElement | HTMLTextAreaElement;
   /**
-   * Offsets captured at selection time, for form fields.
+   * Offsets captured at selection time, and deliberately not re-read later.
    *
-   * These must be recorded up front and not re-read when replacing. Opening the
-   * card moves focus off the field, and a framework-controlled input reacts to
-   * the blur by reassigning `value`, which collapses the selection — so a
-   * re-read yields `start === end === value.length` and the rewrite gets
-   * appended instead of replacing anything.
+   * Opening the card moves focus off the field, and a framework-controlled
+   * input reacts to the blur by reassigning `value`, which collapses the
+   * selection — so a re-read yields `start === end === value.length` and the
+   * rewrite gets appended instead of replacing anything.
    */
-  selectionStart: number | null;
-  selectionEnd: number | null;
+  readonly start: number;
+  readonly end: number;
+}
+
+/**
+ * Inside a `contenteditable`, addressed by range.
+ *
+ * Carries no element. The one it used to carry was the range's common ancestor
+ * — the *inner* node of an editor's tree, not the editing host, which is the
+ * distinction that makes an append invisible to a text comparison. `replace.ts`
+ * derives the host from the range with the right rule instead, and nothing read
+ * the stored element.
+ */
+export interface RichTextSelection extends SelectionBase {
+  readonly kind: 'rich';
+  readonly range: Range;
+}
+
+/** Ordinary page text: measurable, quotable, not writable. */
+export interface StaticSelection extends SelectionBase {
+  readonly kind: 'static';
+  readonly range: Range;
 }
 
 /**

@@ -49,7 +49,7 @@ describe('getSelectionInfo for form fields', () => {
 
     expect(getSelectionInfo()).toMatchObject({
       text: 'brave',
-      elementType: 'textarea',
+      kind: 'field',
     });
   });
 
@@ -63,7 +63,7 @@ describe('getSelectionInfo for form fields', () => {
 
     expect(getSelectionInfo()).toMatchObject({
       text: 'cd',
-      elementType: 'input',
+      kind: 'field',
     });
   });
 
@@ -142,7 +142,7 @@ describe('getSelectionInfo for window selections', () => {
 
     expect(getSelectionInfo()).toMatchObject({
       text: 'editable text',
-      elementType: 'contenteditable',
+      kind: 'rich',
     });
   });
 
@@ -160,11 +160,12 @@ describe('getSelectionInfo for window selections', () => {
     const live = window.getSelection()!.getRangeAt(0);
     const info = getSelectionInfo();
 
-    expect(info!.range).not.toBe(live);
-    expect(info!.range!.toString()).toBe('some text');
+    if (info?.kind !== 'static') throw new Error('expected a static selection');
+    expect(info.range).not.toBe(live);
+    expect(info.range.toString()).toBe('some text');
   });
 
-  it('classifies static page text as unknown but still returns it', () => {
+  it('classifies ordinary page text as static but still returns it', () => {
     const paragraph = document.createElement('p');
     paragraph.textContent = 'just reading';
     document.body.appendChild(paragraph);
@@ -172,7 +173,7 @@ describe('getSelectionInfo for window selections', () => {
 
     expect(getSelectionInfo()).toMatchObject({
       text: 'just reading',
-      elementType: 'unknown',
+      kind: 'static',
     });
   });
 

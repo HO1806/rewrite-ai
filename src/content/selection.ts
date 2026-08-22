@@ -8,7 +8,12 @@
  */
 
 import { CARD } from '@/shared/constants';
-import type { CardPosition, SelectionInfo } from '@/shared/types';
+import type {
+  CardPosition,
+  EditableSelection,
+  FieldSelection,
+  SelectionInfo,
+} from '@/shared/types';
 
 /**
  * Input types that support the selection APIs.
@@ -34,30 +39,28 @@ export function getSelectionInfo(): SelectionInfo | null {
  * button silently degraded to a clipboard copy and relabelled itself "Copied
  * instead", which is a confusing thing to discover after the fact.
  */
-export function getEditableSelectionInfo(): SelectionInfo | null {
+export function getEditableSelectionInfo(): EditableSelection | null {
   const info = getSelectionInfo();
   return info && isEditableSelection(info) ? info : null;
 }
 
-export function isEditableSelection(info: SelectionInfo): boolean {
-  return (
-    info.elementType === 'textarea' ||
-    info.elementType === 'input' ||
-    info.elementType === 'contenteditable'
-  );
+/** Narrows, so callers past this point hold the answer in the type. */
+export function isEditableSelection(
+  info: SelectionInfo,
+): info is EditableSelection {
+  return info.kind !== 'static';
 }
 
 /** A selection inside an <input> or <textarea>. */
-function readFormFieldSelection(): SelectionInfo | null {
+function readFormFieldSelection(): FieldSelection | null {
   const activeEl = document.activeElement;
   if (!activeEl) return null;
 
-  const isTextArea = activeEl.tagName === 'TEXTAREA';
   const isTextInput =
     activeEl.tagName === 'INPUT' &&
     TEXT_INPUT_TYPES.has((activeEl as HTMLInputElement).type.toLowerCase());
 
-  if (!isTextArea && !isTextInput) return null;
+  if (activeEl.tagName !== 'TEXTAREA' && !isTextInput) return null;
 
   const field = activeEl as HTMLInputElement | HTMLTextAreaElement;
   const start = field.selectionStart ?? 0;
@@ -65,13 +68,12 @@ function readFormFieldSelection(): SelectionInfo | null {
   if (start === end) return null;
 
   return {
+    kind: 'field',
     text: field.value.substring(start, end),
-    range: null,
     element: field,
-    elementType: isTextArea ? 'textarea' : 'input',
     position: positionBelow(field.getBoundingClientRect()),
-    selectionStart: start,
-    selectionEnd: end,
+    start,
+    end,
   };
 }
 
@@ -105,13 +107,10 @@ function readWindowSelection(): SelectionInfo | null {
     element?.closest('[contenteditable="true"]') != null;
 
   return {
+    kind: isContentEditable ? 'rich' : 'static',
     text,
     range,
-    element,
-    elementType: isContentEditable ? 'contenteditable' : 'unknown',
     position: positionBelow(range.getBoundingClientRect()),
-    selectionStart: null,
-    selectionEnd: null,
   };
 }
 

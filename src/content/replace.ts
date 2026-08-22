@@ -6,7 +6,7 @@
  * copy when the selection is not editable at all.
  */
 
-import type { SelectionInfo } from '@/shared/types';
+import type { EditableSelection, FieldSelection } from '@/shared/types';
 
 /**
  * What actually happened.
@@ -27,10 +27,10 @@ export type ReplaceOutcome =
 type ContentEditableOutcome = 'replaced' | 'dirty' | 'failed';
 
 export async function replaceSelectedText(
-  selectionInfo: SelectionInfo,
+  selectionInfo: EditableSelection,
   newText: string,
 ): Promise<ReplaceOutcome> {
-  const { element, elementType, range, text } = selectionInfo;
+  const { text } = selectionInfo;
   let wasPageChanged = false;
 
   try {
@@ -41,29 +41,18 @@ export async function replaceSelectedText(
      */
     if (squash(text) === squash(newText)) return 'unchanged';
 
-    if ((elementType === 'textarea' || elementType === 'input') && element) {
-      if (
-        replaceInFormField(
-          element as HTMLInputElement | HTMLTextAreaElement,
-          newText,
-          selectionInfo,
-        )
-      ) {
-        return 'replaced';
-      }
+    if (selectionInfo.kind === 'field') {
+      if (replaceInFormField(selectionInfo, newText)) return 'replaced';
       return (await copyToClipboard(newText)) ? 'copied' : 'failed';
     }
 
-    if (
-      elementType === 'contenteditable' ||
-      (range && isEditableRange(range))
-    ) {
-      if (range) {
-        const outcome = await replaceInContentEditable(range, newText, text);
-        if (outcome === 'replaced') return 'replaced';
-        wasPageChanged = outcome === 'dirty';
-      }
-    }
+    const outcome = await replaceInContentEditable(
+      selectionInfo.range,
+      newText,
+      text,
+    );
+    if (outcome === 'replaced') return 'replaced';
+    wasPageChanged = outcome === 'dirty';
   } catch (err) {
     console.warn('[Rewrite AI] Could not replace the selection:', err);
   }
@@ -84,17 +73,11 @@ export async function replaceSelectedText(
  * degraded to a clipboard copy.
  */
 function replaceInFormField(
-  field: HTMLInputElement | HTMLTextAreaElement,
+  selection: FieldSelection,
   newText: string,
-  selectionInfo: SelectionInfo,
 ): boolean {
-  /**
-   * Use the offsets captured when the selection was made, not the field's
-   * current ones. Opening the card moves focus away, and a framework-controlled
-   * field reacts to the blur by reassigning `value`, which collapses the
-   * selection to the end — re-reading here appended the rewrite to the user's
-   * original text while still reporting a successful replacement.
-   */
+  const { element: field, start, end } = selection;
+
   /**
    * A detached field still answers `.value` and `.setSelectionRange`, so every
    * check below passes and the native setter writes into an orphan node that is
@@ -103,9 +86,6 @@ function replaceInFormField(
    * is all it takes.
    */
   if (!field.isConnected) return false;
-
-  const start = selectionInfo.selectionStart ?? field.selectionStart ?? 0;
-  const end = selectionInfo.selectionEnd ?? field.selectionEnd ?? 0;
 
   // The field may have changed under us; a stale range would corrupt the value.
   if (start > field.value.length || end > field.value.length || start > end) {
@@ -506,8 +486,4 @@ function getEditingHost(node: Node): HTMLElement | null {
     host = el;
   }
   return host;
-}
-
-function isEditableRange(range: Range): boolean {
-  return getEditingHost(range.commonAncestorContainer) !== null;
 }
