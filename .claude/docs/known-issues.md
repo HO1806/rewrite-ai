@@ -33,7 +33,7 @@ verified rather than assumed:
   1280×380, drawer open and closed. Before the cap its bottom sat 168px below the
   fold, and being `position: fixed` it could not be scrolled to.
 - The popup and options pages render with their token stylesheet applied.
-- Context menus build with no errors, and the service worker registers cleanly.
+- The service worker registers cleanly.
 
 **Still unverified, and it needs a human with a real browser:**
 
@@ -173,42 +173,33 @@ What it does not cover:
   programmatic signal for it, so this is a judgement that has to be re-made whenever
   the list is refreshed.
 
-## Open findings from the August 2026 audit
+## The August 2026 audit is closed
 
 Nine specialist agents audited every surface; the full record with dispositions is in
-[audit-2026-08.md](audit-2026-08.md). Everything below was found, verified, and deliberately
-**not** fixed, because each changes behaviour or costs more than that pass allowed. They are
-listed here so they stay visible rather than living only in an audit file.
+[audit-2026-08.md](audit-2026-08.md). Eighteen findings were fixed in that pass and ten
+deferred. **The ten are now closed** — eight fixed, two resolved against the audit's own
+recommendation, both recorded there with the reasoning. Nothing from it is outstanding.
 
-- **Truncation is never surfaced (HIGH).** No stream parser checks whether the model stopped
-  because it hit the token limit, and Gemini's error extractor explicitly whitelists
-  `MAX_TOKENS`. A rewrite cut off mid-sentence is presented as complete. Fixing it needs a
-  decision: fail and lose the partial text, or show it with a notice, which needs UI that does
-  not exist.
-- **`loadSettings` heals wholesale (HIGH).** One corrupt field discards the whole object,
-  including the API key, with only a console warning. Mitigated in practice — stored values
-  merge over defaults first, so a missing field is harmless and only real corruption triggers
-  it — but the fix is per-field healing plus telling the user their key was dropped.
-- **A missing provider field reads as an empty one (MEDIUM),** so an API shape change or a
-  model refusal becomes a successful empty rewrite.
-- **PING resolves on the first frame to answer (MEDIUM),** not the frame holding the selection.
-  Pre-existing, and it mattered less when the context menu offered a frame-scoped path.
-- **`SelectionInfo` is an undiscriminated union (MEDIUM).** No live bug; the cheap slice is
-  deleting the unused `element` field on the rich-text path.
-- **The API key travels to any https base URL (MEDIUM),** for every provider rather than only
-  `custom`. Wants an advisory warning in the options UI, not a schema change.
-- **No sender check on the message bridges (LOW).** Not currently exploitable.
-- **`--border-strong` is 2.00:1 in the light theme (LOW),** under the 3:1 for non-text.
-  Mitigated by the legible labels on the buttons it outlines.
+Two are worth carrying forward as facts about the code rather than as open work:
+
+- **Truncation is surfaced, not hidden, but only where a provider says so.** Each dialect's
+  stop reason is read (`finish_reason`, `stop_reason`, `finishReason`, `done_reason`) and the
+  card says the text was cut off. A provider that reports nothing still looks complete; there
+  is no way to tell from the outside.
+- **`stripWrappingQuotes` can still strip quotes the model meant.** Narrowing it to require an
+  echoed delimiter was tried and reverted — it broke the common case to avoid a rarer one. The
+  tradeoff is argued in `src/prompts/sanitize.ts`; see Accepted tradeoffs below.
 
 ## Accepted tradeoffs
 
 Not bugs. Documented so nobody "fixes" them without knowing the reason.
 
-- **The context menu uses `contexts: ['editable']`.** Chrome cannot AND two
-  contexts, so this is the closest match to Edge's "editable field with something
-  selected". The cost is that the submenu is visible in a text field even with
-  nothing selected, where clicking does nothing.
+- **Stray quotes are left in preference to removing quotes the model meant.**
+  `stripWrappingQuotes` fires on first/last symmetry, which cannot distinguish an echoed
+  wrapper from a result that is genuinely a quoted sentence. Requiring an echoed delimiter as
+  corroboration was tried and reverted: it stopped the common case — quotes with no tag, which
+  is most of them. The asymmetry decides it. Stray quotes are visible and a user deletes them;
+  quotes wrongly removed silently change what the text says.
 - **The inline trigger resolves the theme once**, at registration. Changing the
   theme mid-session leaves the button stale until the page reloads. Subscribing
   would put a `chrome.storage` listener in every frame of every page for something
