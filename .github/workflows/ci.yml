@@ -22,7 +22,7 @@ jobs:
       # and local development cannot drift. Pinning this to 8 by hand is what
       # made every previous run fail: pnpm 8 cannot read a v9 lockfile, so the
       # install step died before anything else ran.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v4
         with:
