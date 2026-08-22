@@ -8,7 +8,7 @@
   "author": "Rewrite AI Contributors",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rewrite-ai/rewrite-ai"
+    "url": "https://github.com/HO1806/rewrite-ai"
   },
   "packageManager": "pnpm@10.33.0",
   "scripts": {

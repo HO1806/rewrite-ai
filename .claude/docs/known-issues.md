@@ -216,12 +216,17 @@ Not bugs. Documented so nobody "fixes" them without knowing the reason.
   `chrome://extensions/shortcuts`. Chosen over Edge's `Alt+I` so the two do not
   clash for anyone running both browsers.
 
-## No release has been published
+## Hosted privately; not on the Chrome Web Store
 
-`release.yml` builds a zip and creates a GitHub release, but there is no Chrome
-Web Store publish step; adding one needs store credentials in repository secrets.
-The `package.json` `repository` field points at `github.com/rewrite-ai/rewrite-ai`,
-which has not been verified as the real remote.
+The remote is `github.com/HO1806/rewrite-ai`, private. `release.yml` fires on a `v*`
+tag, verifies the tag against `manifest.json`, runs `pnpm verify`, zips `dist/` and
+attaches it to a GitHub Release.
+
+**Installing means downloading that zip and loading it unpacked** — Chrome blocks
+`.crx` installs from outside the Web Store for ordinary users, and a self-hosted
+`update_url` needs enterprise policy. So there is no auto-update. A store listing
+would need credentials in repository secrets and a screenshot refresh; `store-assets/`
+still shows the pre-trim UI.
 
 ## Untested by design
 

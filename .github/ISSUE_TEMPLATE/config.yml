@@ -1,8 +1,7 @@
 blank_issues_enabled: false
 contact_links:
+  # Discussions is not enabled on this repo, so the "Question or idea" link that
+  # used to sit here pointed at a 404. Security advisories are always available.
   - name: Security vulnerability
-    url: https://github.com/rewrite-ai/rewrite-ai/security/advisories/new
+    url: https://github.com/HO1806/rewrite-ai/security/advisories/new
     about: Report security issues privately, not as a public issue.
-  - name: Question or idea
-    url: https://github.com/rewrite-ai/rewrite-ai/discussions
-    about: Ask a question or float an idea before filing an issue.
